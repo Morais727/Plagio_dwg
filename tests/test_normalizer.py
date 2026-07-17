@@ -2,6 +2,7 @@ import math
 from pathlib import Path
 from typing import Tuple
 
+import numpy as np
 import pytest
 
 from detector.normalizer import Normalizer
@@ -242,21 +243,16 @@ def _angle_distance(a: float, b: float) -> float:
     return min(diff, 360.0 - diff)
 
 
-def test_normalize_centers_geometry_bounding_box_at_origin(
+def test_normalize_centers_geometry_centroid_at_origin(
     normalizer: Normalizer,
 ) -> None:
     document = _document(_sample_entities())
     normalized = normalizer.normalize(document)
-    xs = []
-    ys = []
-    for entity in normalized.entities:
-        if isinstance(entity, LineEntity):
-            xs.extend([entity.start[0], entity.end[0]])
-            ys.extend([entity.start[1], entity.end[1]])
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
-    assert (min_x + max_x) / 2.0 == pytest.approx(0.0, abs=1e-6)
-    assert (min_y + max_y) / 2.0 == pytest.approx(0.0, abs=1e-6)
+    points = normalizer._collect_points(normalized.entities)
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    assert sum(xs) / len(xs) == pytest.approx(0.0, abs=1e-6)
+    assert sum(ys) / len(ys) == pytest.approx(0.0, abs=1e-6)
 
 
 def test_normalize_scales_bounding_box_largest_dimension_to_one(
@@ -265,11 +261,7 @@ def test_normalize_scales_bounding_box_largest_dimension_to_one(
     document = _document(_sample_entities())
     transform = normalizer.compute_transform(document)
     normalized = normalizer.normalize(document)
-    points = []
-    for entity in normalized.entities:
-        if isinstance(entity, LineEntity):
-            points.append(entity.start)
-            points.append(entity.end)
+    points = normalizer._collect_points(normalized.entities)
     xs = [p[0] for p in points]
     ys = [p[1] for p in points]
     width = max(xs) - min(xs)
@@ -431,3 +423,26 @@ def test_normalize_is_reproducible(normalizer: Normalizer) -> None:
     first = normalizer.normalize(document)
     second = normalizer.normalize(document)
     assert first == second
+
+
+def test_principal_rotation_matrix_produces_a_proper_rotation(
+    normalizer: Normalizer,
+) -> None:
+    centered_xy = np.array(
+        [[-4.0, -1.0], [4.0, 1.0], [-2.0, 3.0], [2.0, -3.0], [6.0, 0.5]]
+    )
+    rotation_matrix = normalizer._principal_rotation_matrix(centered_xy)
+    assert np.linalg.det(rotation_matrix) == pytest.approx(1.0, abs=1e-9)
+    identity = rotation_matrix @ rotation_matrix.T
+    assert np.allclose(identity, np.eye(2), atol=1e-9)
+
+
+def test_transform_entity_returns_unknown_entities_unchanged(
+    normalizer: Normalizer,
+) -> None:
+    class UnknownEntity:
+        pass
+
+    unknown = UnknownEntity()
+    transform = normalizer.compute_transform(_document(_sample_entities()))
+    assert normalizer._transform_entity(unknown, transform) is unknown

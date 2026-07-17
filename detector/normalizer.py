@@ -75,16 +75,14 @@ class Normalizer:
                 scale=1.0,
             )
         array = np.array(points, dtype=np.float64)
-        min_xyz = array.min(axis=0)
-        max_xyz = array.max(axis=0)
-        center = (min_xyz + max_xyz) / 2.0
+        center = array.mean(axis=0)
         centered_xy = array[:, :2] - center[:2]
         rotation_matrix = self._principal_rotation_matrix(centered_xy)
         rotated_xy = centered_xy @ rotation_matrix.T
         width = float(rotated_xy[:, 0].max() - rotated_xy[:, 0].min())
         height = float(rotated_xy[:, 1].max() - rotated_xy[:, 1].min())
-        extent = max(width, height, _EPSILON)
-        scale = 1.0 / extent
+        extent = max(width, height)
+        scale = 1.0 / extent if extent > _EPSILON else 1.0
         angle_degrees = float(
             np.degrees(np.arctan2(rotation_matrix[1, 0], rotation_matrix[0, 0]))
         )
@@ -135,10 +133,8 @@ class Normalizer:
     def _principal_rotation_matrix(
         self, centered_xy: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        if centered_xy.shape[0] < 2:
-            return np.eye(2, dtype=np.float64)
         covariance = np.cov(centered_xy, rowvar=False)
-        if covariance.shape != (2, 2):
+        if covariance.shape != (2, 2) or np.allclose(covariance, 0.0):
             return np.eye(2, dtype=np.float64)
         eigenvalues, eigenvectors = np.linalg.eigh(covariance)
         order = np.argsort(eigenvalues)[::-1]

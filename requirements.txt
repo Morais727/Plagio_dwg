@@ -1,0 +1,13 @@
+ezdxf>=1.4
+numpy
+scipy
+networkx
+pandas
+rapidfuzz
+matplotlib
+plotly
+PySide6
+opencv-python
+scikit-learn
+pytest
+pytest-cov

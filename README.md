@@ -25,7 +25,6 @@ Sistema em Python para analisar arquivos DWG/DXF e identificar pares suspeitos d
 project/
 ├── app.py                  # ponto de entrada (a implementar)
 ├── config.py               # configuração centralizada
-├── CLAUDE.md               # instruções para o Claude Code
 ├── detector/
 │   ├── reader.py           # leitura DXF (✅)
 │   ├── normalizer.py       # normalização geométrica (✅)

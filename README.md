@@ -9,59 +9,108 @@ Sistema em Python para analisar arquivos DWG/DXF e identificar pares suspeitos d
 | `config.py` | ✅ |
 | `detector/reader.py` | ✅ |
 | `detector/normalizer.py` | ✅ |
-| `detector/features.py` | ⏳ |
-| `detector/graph.py` | ⏳ |
-| `detector/sequence.py` | ⏳ |
-| `detector/similarity.py` | ⏳ |
-| `detector/report.py` | ⏳ |
-| `detector/classifier.py` | ⏳ |
-| `ui/main_window.py` | ⏳ |
-| `app.py` | ⏳ |
-| Testes | ⏳ |
+| `detector/features.py` | ✅ |
+| `detector/graph.py` | ✅ |
+| `detector/sequence.py` | ✅ |
+| `detector/similarity.py` | ✅ |
+| `detector/dwg_converter.py` | ✅ |
+| `detector/report.py` | ✅ |
+| `detector/classifier.py` | ⏳ (opcional) |
+| `ui/main_window.py` | ✅ |
+| `build_exe.py` | ✅ |
+| Testes | ✅ (161) |
 
-## Estrutura
+## Instalação
 
-```
-project/
-├── app.py                  # ponto de entrada (a implementar)
-├── config.py               # configuração centralizada
-├── detector/
-│   ├── reader.py           # leitura DXF (✅)
-│   ├── normalizer.py       # normalização geométrica (✅)
-│   ├── features.py         # extração de features (⏳)
-│   ├── graph.py            # grafo NetworkX (⏳)
-│   ├── sequence.py         # análise de sequência (⏳)
-│   ├── similarity.py       # engine de similaridade (⏳)
-│   ├── classifier.py       # ML opcional (⏳)
-│   └── report.py           # relatórios PDF/HTML (⏳)
-├── ui/
-│   └── main_window.py      # GUI PySide6 (⏳)
-├── tests/
-│   ├── test_reader.py      # (✅)
-│   ├── test_normalizer.py  # (✅)
-│   └── ...                 # (⏳)
-├── data/                   # arquivos de entrada
-├── requirements.txt
-└── README.md
+### Dependências Python
+
+```bash
+pip install -r requirements.txt
 ```
 
-### Pipeline de análise
+### ODA File Converter (para leitura DWG)
 
-1. **Importar** — Converte DWG → DXF via ODA File Converter (quando necessário)
-2. **Ler** — Extrai entidades CAD do DXF com `ezdxf`
-3. **Normalizar** — Remove efeitos de translação, escala e rotação
-4. **Extrair features** — Gera vetor de características geométricas, de estilo e metadados
-5. **Comparar** — Compara todos os pares usando múltiplas métricas
-6. **Calcular score** — Combina métricas em um índice de suspeita (0–100)
+O ODA File Converter é um programa externo gratuito (para uso acadêmico) que converte DWG para DXF.
 
-### Componentes do score
+```bash
+python scripts/install_oda.py
+```
 
-| Componente | Peso | Descrição |
-|---|---|---|
-| Geometria | 35% | Similaridade de features geométricas (ângulos, comprimentos, bounding box, etc.) |
-| Sequência | 35% | Ordem das entidades no arquivo (LCS, Levenshtein, DTW) |
-| Grafo | 20% | Relações topológicas entre entidades (paralelismo, perpendicularidade, interseções) |
-| Estilos/Layers | 10% | Layers, blocos, estilos de texto e cota |
+No Linux, a conversão usa `xvfb-run` para suprimir a janela GUI.
+
+## Uso
+
+### Interface gráfica
+
+```bash
+python app.py
+```
+
+Selecionar pasta com arquivos `.dxf` — o processamento inicia automaticamente.
+
+### Linha de comando
+
+```bash
+python app.py --folder data/meus_desenhos
+```
+
+### Testes
+
+```bash
+pytest
+pytest --cov=detector --cov-report=term-missing
+```
+
+## Build de executável
+
+### Linux (nativo)
+
+```bash
+python build_exe.py
+```
+
+Gera `dist/DetectorPlagioCAD`.
+
+### Windows (cruzado do Linux)
+
+Requer Wine + Python for Windows + dependências instaladas.
+
+```bash
+# 1. Instalar Wine
+sudo apt install wine wine64
+
+# 2. Baixar e instalar Python for Windows
+#    Baixa de https://www.python.org/downloads/windows/
+wget https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe
+wine python-3.10.11-amd64.exe /quiet InstallAllUsers=1 PrependPath=1
+
+# 3. Instalar dependências no Python Windows
+wine "C:\\Program Files\\Python310\\python.exe" -m pip install pyinstaller ezdxf numpy pandas networkx rapidfuzz pyside6
+
+# 4. Build
+python build_exe.py --target windows
+```
+
+Gera `dist/DetectorPlagioCAD.exe`.
+
+> **Nota:** Wine 9.0 pode falhar com `ucrtbase.dll.crealf` ao processar numpy.
+> Instale a ucrtbase nativa da Microsoft com `winetricks ucrtbase` ou
+> atualize o Wine seguindo https://wiki.winehq.org/Ubuntu.
+
+### Windows (nativo)
+
+```bash
+python build_exe.py
+```
+
+### Opções do build
+
+```
+python build_exe.py --help
+
+--target {linux,windows}   SO de destino (padrao: SO atual)
+--python PYTHON            Caminho do interpretador Python (para compilação cruzada)
+```
 
 ## Configuração
 
@@ -72,15 +121,21 @@ Edite `config.py` para ajustar:
 - Caminho do ODA File Converter
 - Versão de saída do DXF
 
-## Testes
+## Score
 
-```bash
-# Executar todos os testes
-pytest
+| Componente | Peso | Descrição |
+|---|---|---|
+| Geometria | 35% | Similaridade de features geométricas |
+| Sequência | 35% | Ordem das entidades no arquivo |
+| Grafo | 20% | Relações topológicas entre entidades |
+| Estilos/Layers | 10% | Layers, blocos, estilos |
 
-# Com cobertura
-pytest --cov=detector --cov-report=term-missing
-```
+Faixas de cor:
+- < 70% → verde
+- 70–80% → amarelo
+- 80–95% → laranja
+- > 95% → vermelho
+- 100% → exibe "cópia"
 
 ## Pipeline
 
@@ -94,66 +149,35 @@ Arquivos DXF → Reader → Normalizer → FeatureExtractor → SimilarityEngine
 ## Módulos
 
 ### Reader (`detector/reader.py`)
-Lê arquivos DXF com `ezdxf`. Extrai entidades (LINE, ARC, CIRCLE, LWPOLYLINE, INSERT, TEXT, MTEXT, DIMENSION), layers, blocos, estilos de texto/cota e metadados (autor, versão, timestamps). Retorna um `CadDocument` imutável com todos os dados.
+Lê arquivos DXF com `ezdxf`. Extrai entidades (LINE, ARC, CIRCLE, LWPOLYLINE, INSERT, TEXT, MTEXT, DIMENSION), layers, blocos, estilos de texto/cota e metadados (autor, versão, timestamps). Retorna um `CadDocument` imutável.
+
+### DWG Converter (`detector/dwg_converter.py`)
+Converte arquivos DWG para DXF usando ODA File Converter. Usa `xvfb-run` no Linux para suprimir a janela GUI. Config path cross‑platform (Linux: `~/.config/plagio_dwg`, Windows: `%APPDATA%/plagio_dwg`).
 
 ### Normalizer (`detector/normalizer.py`)
-Remove diferenças irrelevantes de posição (centraliza na origem), rotação (alinha eixos principais via PCA) e escala (normaliza bounding box para tamanho unitário). Aplica a transformação a todas as coordenadas, comprimentos e ângulos das entidades.
+Remove diferenças irrelevantes de posição (centraliza na origem), rotação (alinha eixos principais via PCA) e escala (normaliza bounding box).
 
 ### FeatureExtractor (`detector/features.py`)
-Produz um `FeatureVector` imutável com:
-- **Contagem por tipo** de entidade (LINE, ARC, CIRCLE, etc.)
-- **Histograma de ângulos** (36 bins, 0–360°)
-- **Histograma de comprimentos** (20 bins)
-- **Bounding box** (largura, altura, área)
-- **Densidade espacial** (grade 10×10)
-- **Uso de layers** (quantidade por layer)
-- **Uso de blocos** (quantidade por bloco)
-- **Precisão decimal** (histograma de casas decimais usadas)
+Produz um `FeatureVector` imutável com contagens por tipo de entidade, histograma de ângulos, histograma de comprimentos, bounding box, densidade espacial, uso de layers, uso de blocos e precisão decimal.
 
 ### GraphBuilder (`detector/graph.py`)
-Constrói um grafo NetworkX onde cada nó é uma entidade e as arestas representam relações geométricas: interseção, paralelismo, perpendicularidade (entre segmentos) e tangência (entre círculos/arcos e segmentos). Extrai métricas: degree centrality, betweenness centrality, clustering coefficient, número de componentes.
+Constrói um grafo NetworkX onde cada nó é uma entidade e as arestas representam relações geométricas (interseção, paralelismo, perpendicularidade, tangência). Extrai métricas: degree centrality, betweenness centrality, clustering coefficient, componentes.
 
 ### SequenceAnalyzer (`detector/sequence.py`)
-Converte a sequência de entidades do arquivo em uma string de códigos (L, A, C, P, I, T, M, D). Compara pares de sequências usando LCS (Longest Common Subsequence) e distância Levenshtein via `RapidFuzz`. Suporta DTW (Dynamic Time Warping) como opção.
+Converte a sequência de entidades em string de códigos (L, A, C, P, I, T, M, D). Compara pares usando LCS e distância Levenshtein via `RapidFuzz`. Suporta DTW como opção.
 
 ### SimilarityEngine (`detector/similarity.py`)
-Combina 5 componentes em um score de 0 a 100 com pesos configuráveis:
-
-| Componente | Peso | Métrica |
-|---|---|---|
-| Geometria | 35% | Similaridade de histogramas, bounding box, contagens |
-| Sequência | 25% | LCS + Levenshtein normalizados |
-| Grafo | 20% | Densidade, centralidades, componentes |
-| Estilos/Layers | 10% | Jaccard entre conjuntos de layers, blocos, estilos |
-| Metadados | 10% | Autor, versão DXF, last saved by |
-
-Cada componente produz um score individual com justificativa textual.
+Combina os componentes em score 0–100 com pesos configuráveis. Cada componente produz score individual.
 
 ### ReportGenerator (`detector/report.py`)
-Gera relatório para cada par comparado contendo: índice de suspeita, score por componente, justificativa textual, tabela de métricas e imagens dos desenhos lado a lado (matplotlib). Exporta em **HTML** (visualização no navegador) e **PDF** (impressão).
+Gera relatório para cada par em **HTML** e **PDF** com índice de suspeita, score por componente, tabela de métricas e imagens lado a lado.
 
 ### GUI (`ui/main_window.py`)
-Interface PySide6 com:
-- Botão **Selecionar Pasta** — escolhe diretório com arquivos .dxf
-- Botão **Processar** — executa o pipeline completo em thread separada (não trava a界面)
-- **Barra de progresso** com status em tempo real
-- **Tabela ranking** — pares ordenados do maior score para o menor
-- **Clique em um par** → abre diálogo de comparação lado a lado com imagem, métricas e justificativa
-- **Botão Exportar PDF** — salva relatório individual
-
-### app.py
-Ponto de entrada. Inicializa a aplicação Qt e abre a janela principal.
+Interface PySide6 com seleção de pasta (processamento automático), tabela ranking ordenada, diálogo de comparação lado a lado e exportação de relatório PDF.
 
 ## Tecnologias
 
-Python 3.12+, ezdxf, NumPy, SciPy, NetworkX, pandas, RapidFuzz, matplotlib, PySide6.
-
-## Como usar (em breve)
-
-```bash
-pip install -r requirements.txt
-python app.py
-```
+Python 3.12+, ezdxf, NumPy, NetworkX, pandas, RapidFuzz, matplotlib, PySide6.
 
 ## Licença
 

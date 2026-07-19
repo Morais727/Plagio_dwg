@@ -1,19 +1,29 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_dynamic_libs
+from PyInstaller.utils.hooks import collect_all
 
+datas = [('detector', 'detector'), ('ui', 'ui')]
+binaries = []
+hiddenimports = ['ezdxf.recover']
+binaries += collect_dynamic_libs('pyexpat')
+tmp_ret = collect_all('ezdxf')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
+_libexpat_path = None
 a = Analysis(
     ['app.py'],
     pathex=[],
-    binaries=[],
-    datas=[('detector', 'detector')],
-    hiddenimports=[],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['scipy', 'plotly', 'cv2', 'sklearn'],
     noarchive=False,
     optimize=0,
 )
+
 pyz = PYZ(a.pure)
 
 exe = EXE(

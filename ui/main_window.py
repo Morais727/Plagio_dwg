@@ -5,8 +5,8 @@ from itertools import combinations
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -28,10 +28,20 @@ from config import Config
 from detector.features import FeatureExtractor
 from detector.graph import GraphBuilder
 from detector.normalizer import Normalizer
-from detector.reader import CadDocument, DxfReader
+from detector.reader import CadDocument, CadReader
 from detector.report import PairReport, ReportGenerator
 from detector.sequence import SequenceAnalyzer
 from detector.similarity import SimilarityEngine, SimilarityResult
+
+
+def _vibrant_score_color(score: float) -> str:
+    if score < 70.0:
+        return "#27ae60"
+    if score < 80.0:
+        return "#f1c40f"
+    if score < 95.0:
+        return "#e67e22"
+    return "#e74c3c"
 
 
 @dataclass(frozen=True)
@@ -64,13 +74,15 @@ class ProcessingWorker(QThread):
         self.finished_ok.emit(results)
 
     def _process(self) -> List[PairResult]:
-        paths = sorted(self._folder.glob("*.dxf"))
+        paths = sorted(
+            set(self._folder.glob("*.dxf")) | set(self._folder.glob("*.dwg"))
+        )
         if len(paths) < 2:
             raise ValueError(
-                "Selecione uma pasta com ao menos 2 arquivos .dxf para comparar."
+                "Selecione uma pasta com ao menos 2 arquivos .dxf ou .dwg para comparar."
             )
 
-        reader = DxfReader()
+        reader = CadReader()
         normalizer = Normalizer()
         feature_extractor = FeatureExtractor(self._config)
         graph_builder = GraphBuilder(self._config)
@@ -181,7 +193,10 @@ class ComparisonDialog(QDialog):
         table.setRowCount(len(dataframe))
         for row_index, row in enumerate(dataframe.itertuples(index=False)):
             for column_index, value in enumerate(row):
-                table.setItem(row_index, column_index, QTableWidgetItem(str(value)))
+                item = QTableWidgetItem(str(value))
+                if column_index == 3:
+                    item.setBackground(QColor(_vibrant_score_color(float(value))))
+                table.setItem(row_index, column_index, item)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
@@ -202,7 +217,10 @@ class ComparisonDialog(QDialog):
 
 class MainWindow(QMainWindow):
     def __init__(
-        self, config: Optional[Config] = None, parent: Optional[QWidget] = None
+        self,
+        config: Optional[Config] = None,
+        initial_folder: Optional[Path] = None,
+        parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
         self._config = config if config is not None else Config()
@@ -223,12 +241,8 @@ class MainWindow(QMainWindow):
         self._select_folder_button = QPushButton("Selecionar Pasta")
         self._select_folder_button.clicked.connect(self._on_select_folder)
         self._folder_label = QLabel("Nenhuma pasta selecionada")
-        self._process_button = QPushButton("Processar")
-        self._process_button.setEnabled(False)
-        self._process_button.clicked.connect(self._on_process)
         selection_row.addWidget(self._select_folder_button)
         selection_row.addWidget(self._folder_label, 1)
-        selection_row.addWidget(self._process_button)
         layout.addLayout(selection_row)
 
         self._progress_bar = QProgressBar()
@@ -239,9 +253,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._status_label)
 
         self._ranking_table = QTableWidget()
-        self._ranking_table.setColumnCount(4)
+        self._ranking_table.setColumnCount(3)
         self._ranking_table.setHorizontalHeaderLabels(
-            ["Aluno A", "Aluno B", "Score de Suspeita", "Justificativa"]
+            ["Aluno A", "Aluno B", "Score de Suspeita"]
         )
         self._ranking_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Stretch
@@ -253,20 +267,24 @@ class MainWindow(QMainWindow):
         self._ranking_table.cellClicked.connect(self._on_row_clicked)
         layout.addWidget(self._ranking_table)
 
+        if initial_folder is not None:
+            self._selected_folder = initial_folder
+            self._folder_label.setText(str(self._selected_folder))
+            QTimer.singleShot(100, self._on_process)
+
     def _on_select_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
-            self, "Selecionar pasta com arquivos DXF"
+            self, "Selecionar pasta com arquivos DXF/DWG"
         )
         if not folder:
             return
         self._selected_folder = Path(folder)
         self._folder_label.setText(str(self._selected_folder))
-        self._process_button.setEnabled(True)
+        QTimer.singleShot(50, self._on_process)
 
     def _on_process(self) -> None:
         if self._selected_folder is None:
             return
-        self._process_button.setEnabled(False)
         self._select_folder_button.setEnabled(False)
         self._ranking_table.setRowCount(0)
         self._report_cache.clear()
@@ -290,37 +308,29 @@ class MainWindow(QMainWindow):
         self._results = results
         self._progress_bar.setVisible(False)
         self._status_label.setText(f"{len(results)} par(es) comparado(s).")
-        self._process_button.setEnabled(True)
         self._select_folder_button.setEnabled(True)
         self._populate_ranking_table()
 
     def _on_failed(self, message: str) -> None:
         self._progress_bar.setVisible(False)
         self._status_label.setText("Falha no processamento.")
-        self._process_button.setEnabled(True)
         self._select_folder_button.setEnabled(True)
         QMessageBox.critical(self, "Erro ao processar", message)
 
     def _populate_ranking_table(self) -> None:
         self._ranking_table.setRowCount(len(self._results))
         for row_index, result in enumerate(self._results):
-            justification = self._report_generator.build_justification(
-                result.similarity_result
-            )
+            score = result.similarity_result.total_score
             self._ranking_table.setItem(
                 row_index, 0, QTableWidgetItem(result.path_a.stem)
             )
             self._ranking_table.setItem(
                 row_index, 1, QTableWidgetItem(result.path_b.stem)
             )
-            self._ranking_table.setItem(
-                row_index,
-                2,
-                QTableWidgetItem(f"{result.similarity_result.total_score:.1f}"),
-            )
-            self._ranking_table.setItem(
-                row_index, 3, QTableWidgetItem(justification)
-            )
+            score_item = QTableWidgetItem(f"{score:.1f}")
+            score_item.setBackground(QColor(_vibrant_score_color(score)))
+            score_item.setForeground(QColor("#000000"))
+            self._ranking_table.setItem(row_index, 2, score_item)
 
     def _on_row_clicked(self, row: int, _column: int) -> None:
         if row < 0 or row >= len(self._results):

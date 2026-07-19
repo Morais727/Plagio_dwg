@@ -1,16 +1,15 @@
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, Optional
 
 
 @dataclass(frozen=True)
 class Config:
     weights: Dict[str, float] = field(default_factory=lambda: {
         "geometry": 0.35,
-        "sequence": 0.25,
+        "sequence": 0.35,
         "graph": 0.20,
         "styles": 0.10,
-        "metadata": 0.10,
     })
     data_dir: Path = Path("data")
     output_dir: Path = Path("reports")
@@ -25,3 +24,7 @@ class Config:
     graph_perpendicular_tolerance_degrees: float = 2.0
     graph_tangency_tolerance: float = 1e-3
     graph_intersection_tolerance: float = 1e-6
+    oda_converter_path: str = "ODAFileConverter"
+    dwg_output_version: str = "ACAD2018"
+    dwg_output_format: str = "DXF"
+    dwg_temp_dir: Optional[Path] = None

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import io
-import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -34,15 +33,13 @@ _COMPONENT_LABELS: Dict[str, str] = {
     "sequence": "Sequência",
     "graph": "Grafo",
     "styles": "Estilos/Layers",
-    "metadata": "Metadados",
 }
 
 _METRICS_TABLE_COLUMNS: Tuple[str, ...] = (
     "componente",
     "peso",
-    "score",
     "contribuicao",
-    "justificativa",
+    "score",
 )
 
 _SUSPICION_THRESHOLDS: Tuple[Tuple[float, str], ...] = (
@@ -121,10 +118,32 @@ def _draw_entity(ax: Axes, entity: CadEntity) -> None:
 
 
 def _justification_headline(total_score: float) -> str:
+    if total_score >= 100.0:
+        return "cópia"
     for threshold, text in _SUSPICION_THRESHOLDS:
         if total_score >= threshold:
             return text
     return _SUSPICION_THRESHOLDS[-1][1]
+
+
+def _score_color_class(score: float) -> str:
+    if score < 70.0:
+        return "score-green"
+    if score < 80.0:
+        return "score-yellow"
+    if score < 95.0:
+        return "score-orange"
+    return "score-red"
+
+
+def _score_facecolor(score: float) -> str:
+    if score < 70.0:
+        return "#d4edda"
+    if score < 80.0:
+        return "#fff3cd"
+    if score < 95.0:
+        return "#ffe0b2"
+    return "#f8d7da"
 
 
 class ReportGenerator:
@@ -138,7 +157,6 @@ class ReportGenerator:
                 "peso": component.weight,
                 "score": round(component.score * 100.0, 2),
                 "contribuicao": round(component.score * component.weight * 100.0, 2),
-                "justificativa": component.justification,
             }
             for component in similarity_result.component_scores
         ]
@@ -204,9 +222,7 @@ class ReportGenerator:
 
     def generate_html(self, report: PairReport) -> str:
         image_base64 = base64.b64encode(report.comparison_image_png).decode("ascii")
-        table_html = report.metrics_table.to_html(
-            index=False, float_format=lambda value: f"{value:.2f}"
-        )
+        table_rows = self._html_table_rows(report.metrics_table)
         return (
             "<!DOCTYPE html>\n"
             '<html lang="pt-br">\n'
@@ -220,6 +236,10 @@ class ReportGenerator:
             "table { border-collapse: collapse; width: 100%; margin-top: 12px; }\n"
             "th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; font-size: 13px; }\n"
             "th { background-color: #f0f0f0; }\n"
+            ".score-green { background-color: #d4edda; color: #155724; font-weight: bold; }\n"
+            ".score-yellow { background-color: #fff3cd; color: #856404; font-weight: bold; }\n"
+            ".score-orange { background-color: #ffe0b2; color: #e65100; font-weight: bold; }\n"
+            ".score-red { background-color: #f8d7da; color: #721c24; font-weight: bold; }\n"
             "img { max-width: 100%; margin-top: 16px; border: 1px solid #ccc; }\n"
             ".justificativa { margin-top: 16px; line-height: 1.5; }\n"
             "</style>\n"
@@ -228,11 +248,30 @@ class ReportGenerator:
             f"<h1>Relatório de Similaridade: {report.document_a_name} × {report.document_b_name}</h1>\n"
             f'<div class="score">Índice de suspeita: {report.similarity_result.total_score:.1f} / 100</div>\n'
             f'<div class="justificativa">{report.justification}</div>\n'
-            f"{table_html}\n"
+            f"{table_rows}\n"
             f'<img src="data:image/png;base64,{image_base64}" alt="Comparação lado a lado" />\n'
             "</body>\n"
             "</html>\n"
         )
+
+    def _html_table_rows(self, table: pd.DataFrame) -> str:
+        rows = ["<table>"]
+        rows.append("<tr><th>Componente</th><th>Peso</th><th>Contribuição (%)</th><th>Score (%)</th></tr>")
+        for _, row in table.iterrows():
+            score = row["score"]
+            contrib = row["contribuicao"]
+            score_class = _score_color_class(score)
+            contrib_class = _score_color_class(contrib)
+            rows.append(
+                f"<tr>"
+                f"<td>{row['componente']}</td>"
+                f"<td>{row['peso']:.2f}</td>"
+                f'<td class="{contrib_class}">{contrib:.2f}</td>'
+                f'<td class="{score_class}">{score:.2f}</td>'
+                f"</tr>"
+            )
+        rows.append("</table>")
+        return "\n".join(rows)
 
     def export_html(self, report: PairReport, output_path: Path) -> Path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -276,34 +315,45 @@ class ReportGenerator:
             fontsize=12,
         )
         ax.text(
-            0.0,
-            0.92,
+            0.0, 0.94,
             f"Índice de suspeita: {report.similarity_result.total_score:.1f} / 100",
-            fontsize=14,
-            fontweight="bold",
-            transform=ax.transAxes,
+            fontsize=14, fontweight="bold", transform=ax.transAxes,
         )
-        wrapped_justification = textwrap.fill(report.justification, width=100)
+        suspicion = _justification_headline(report.similarity_result.total_score)
         ax.text(
-            0.0,
-            0.85,
-            wrapped_justification,
-            fontsize=9,
-            va="top",
-            transform=ax.transAxes,
+            0.0, 0.90,
+            suspicion,
+            fontsize=10, transform=ax.transAxes,
         )
-        table_columns = ["componente", "peso", "score", "contribuicao"]
+        y = 0.86
+        for component in report.similarity_result.component_scores:
+            label = _COMPONENT_LABELS.get(component.name, component.name)
+            ax.text(
+                0.02, y,
+                f"• {label}: {component.score * 100:.1f}% de similaridade",
+                fontsize=9, transform=ax.transAxes, va="top",
+            )
+            y -= 0.04
+        table_top = y - 0.01
+        table_columns = ["componente", "peso", "contribuicao", "score"]
         table_data = report.metrics_table[table_columns].values.tolist()
         table = ax.table(
             cellText=table_data,
-            colLabels=["Componente", "Peso", "Score (%)", "Contribuição (%)"],
+            colLabels=["Componente", "Peso", "Contribuição (%)", "Score (%)"],
             loc="lower center",
             cellLoc="left",
-            bbox=[0.0, 0.05, 1.0, 0.55],
+            bbox=[0.0, 0.02, 1.0, max(table_top - 0.02, 0.25)],
         )
         table.auto_set_font_size(False)
         table.set_fontsize(8)
+        self._color_table_cells(table)
         return figure
+
+    def _color_table_cells(self, table) -> None:
+        for row_idx in range(1, len(table.get_celld()) // 4):
+            score_cell = table[row_idx, 3]
+            score_value = float(score_cell.get_text().get_text())
+            score_cell.set_facecolor(_score_facecolor(score_value))
 
     def _build_image_figure(self, report: PairReport) -> Figure:
         image_array = mpimg.imread(io.BytesIO(report.comparison_image_png), format="png")

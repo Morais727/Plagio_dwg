@@ -15,7 +15,6 @@ _JUSTIFICATION_LABELS: Dict[str, str] = {
     "sequence": "Sequência",
     "graph": "Grafo",
     "styles": "Estilos/Layers",
-    "metadata": "Metadados",
 }
 
 
@@ -150,15 +149,6 @@ class SimilarityEngine:
         )
         return _clamp01(sum(components) / len(components))
 
-    def compare_metadata(self, document_a: CadDocument, document_b: CadDocument) -> float:
-        metadata_a, metadata_b = document_a.metadata, document_b.metadata
-        components = (
-            _optional_equality_similarity(metadata_a.author, metadata_b.author),
-            1.0 if metadata_a.dxf_version == metadata_b.dxf_version else 0.0,
-            _optional_equality_similarity(metadata_a.last_saved_by, metadata_b.last_saved_by),
-        )
-        return _clamp01(sum(components) / len(components))
-
     def compute_score(
         self,
         feature_a: FeatureVector,
@@ -174,7 +164,6 @@ class SimilarityEngine:
             self._component("sequence", self.compare_sequence(sequence_result)),
             self._component("graph", self.compare_graph(graph_a, graph_b)),
             self._component("styles", self.compare_styles(document_a, document_b)),
-            self._component("metadata", self.compare_metadata(document_a, document_b)),
         )
         total = sum(component.score * component.weight for component in component_scores)
         return SimilarityResult(

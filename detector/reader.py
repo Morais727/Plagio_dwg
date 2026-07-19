@@ -125,7 +125,11 @@ class CadDocument:
 
 class DxfLoader:
     def load(self, path: Path) -> Drawing:
-        return ezdxf.readfile(str(path))
+        try:
+            return ezdxf.readfile(str(path))
+        except ezdxf.DXFError:
+            doc, _ = ezdxf.recover.readfile(str(path))
+            return doc
 
 
 def julian_to_datetime(julian_date: float) -> datetime:
@@ -325,3 +329,31 @@ class DxfReader:
         if value is None or float(value) <= 0:
             return None
         return julian_to_datetime(float(value))
+
+
+class CadReader:
+    def __init__(
+        self,
+        dxf_reader: Optional[DxfReader] = None,
+    ) -> None:
+        self._dxf_reader = dxf_reader if dxf_reader is not None else DxfReader()
+
+    def read(self, path: Union[str, Path]) -> CadDocument:
+        file_path = Path(path)
+        suffix = file_path.suffix.lower()
+        if suffix == ".dxf":
+            return self._dxf_reader.read(file_path)
+        if suffix == ".dwg":
+            return self._read_dwg(file_path)
+        raise ValueError(f"Formato nao suportado: {suffix}")
+
+    def _read_dwg(self, dwg_path: Path) -> CadDocument:
+        from detector.dwg_converter import DwgConverter
+        converter = DwgConverter()
+        dxf_path = converter.convert(dwg_path)
+        try:
+            return self._dxf_reader.read(dxf_path)
+        finally:
+            temp_root = dxf_path.parent.parent
+            import shutil
+            shutil.rmtree(str(temp_root), ignore_errors=True)

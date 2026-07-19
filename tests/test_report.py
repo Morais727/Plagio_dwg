@@ -1,3 +1,4 @@
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
@@ -86,13 +87,12 @@ def _all_entity_types_document(source_path: Optional[Path] = None) -> CadDocumen
     return _document(source_path=source_path, entities=entities)
 
 
-def _similarity_result(total_score: float = 72.5) -> SimilarityResult:
+def _similarity_result(total_score: float = 67.5) -> SimilarityResult:
     components = (
         ComponentScore("geometry", 0.9, 0.35, "Geometria: 90.0% de similaridade"),
         ComponentScore("sequence", 0.8, 0.25, "Sequência: 80.0% de similaridade"),
         ComponentScore("graph", 0.5, 0.20, "Grafo: 50.0% de similaridade"),
         ComponentScore("styles", 0.6, 0.10, "Estilos/Layers: 60.0% de similaridade"),
-        ComponentScore("metadata", 1.0, 0.10, "Metadados: 100.0% de similaridade"),
     )
     return SimilarityResult(total_score=total_score, component_scores=components)
 
@@ -101,8 +101,8 @@ def test_build_metrics_table_has_expected_columns_and_row_count(
     generator: ReportGenerator,
 ) -> None:
     table = generator.build_metrics_table(_similarity_result())
-    assert list(table.columns) == ["componente", "peso", "score", "contribuicao", "justificativa"]
-    assert len(table) == 5
+    assert list(table.columns) == ["componente", "peso", "contribuicao", "score"]
+    assert len(table) == 4
     assert isinstance(table, pd.DataFrame)
 
 
@@ -127,7 +127,7 @@ def test_build_justification_mentions_total_score(generator: ReportGenerator) ->
 def test_build_justification_includes_component_details(generator: ReportGenerator) -> None:
     justification = generator.build_justification(_similarity_result())
     assert "Geometria" in justification
-    assert "Metadados" in justification
+    assert "Sequência" in justification
 
 
 def test_build_justification_high_score_yields_high_suspicion_text(
@@ -220,9 +220,10 @@ def test_generate_html_contains_document_names(generator: ReportGenerator) -> No
     assert "AlunoY" in html
 
 
-def test_export_html_writes_file(generator: ReportGenerator, tmp_path: Path) -> None:
+def test_export_html_writes_file(generator: ReportGenerator) -> None:
     document = _all_entity_types_document()
     report = generator.build_report(document, document, _similarity_result())
+    tmp_path = Path(tempfile.mkdtemp())
     output_path = tmp_path / "nested" / "report.html"
     result_path = generator.export_html(report, output_path)
     assert result_path == output_path
@@ -230,9 +231,10 @@ def test_export_html_writes_file(generator: ReportGenerator, tmp_path: Path) -> 
     assert "<!DOCTYPE html>" in output_path.read_text(encoding="utf-8")
 
 
-def test_export_pdf_writes_valid_pdf_file(generator: ReportGenerator, tmp_path: Path) -> None:
+def test_export_pdf_writes_valid_pdf_file(generator: ReportGenerator) -> None:
     document = _all_entity_types_document()
     report = generator.build_report(document, document, _similarity_result())
+    tmp_path = Path(tempfile.mkdtemp())
     output_path = tmp_path / "nested" / "report.pdf"
     result_path = generator.export_pdf(report, output_path)
     assert result_path == output_path
@@ -243,10 +245,11 @@ def test_export_pdf_writes_valid_pdf_file(generator: ReportGenerator, tmp_path: 
 
 
 def test_export_report_returns_html_and_pdf_paths(
-    generator: ReportGenerator, tmp_path: Path
+    generator: ReportGenerator,
 ) -> None:
     document = _all_entity_types_document()
     report = generator.build_report(document, document, _similarity_result())
+    tmp_path = Path(tempfile.mkdtemp())
     html_path, pdf_path = generator.export_report(report, tmp_path, "par_1_2")
     assert html_path == tmp_path / "par_1_2.html"
     assert pdf_path == tmp_path / "par_1_2.pdf"
@@ -254,7 +257,8 @@ def test_export_report_returns_html_and_pdf_paths(
     assert pdf_path.exists()
 
 
-def test_export_report_defaults_to_config_output_dir(tmp_path: Path) -> None:
+def test_export_report_defaults_to_config_output_dir() -> None:
+    tmp_path = Path(tempfile.mkdtemp())
     config = Config(output_dir=tmp_path / "reports")
     generator = ReportGenerator(config=config)
     document = _all_entity_types_document()

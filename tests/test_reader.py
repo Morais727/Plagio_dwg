@@ -8,8 +8,10 @@ from ezdxf.document import Drawing
 from detector.reader import (
     ArcEntity,
     CadDocument,
+    CadReader,
     CircleEntity,
     DimensionEntity,
+    DocumentMetadata,
     DxfLoader,
     DxfReader,
     InsertEntity,
@@ -326,3 +328,59 @@ def test_dimension_measurement_is_none_when_unavailable(reader: DxfReader) -> No
 
     result = reader._parse_dimension(BrokenDimensionEntity())
     assert result.measurement is None
+
+
+def test_cad_reader_uses_dxf_reader_for_dxf(
+    sample_document: Drawing, tmp_path: Path
+) -> None:
+    path = tmp_path / "test.dxf"
+    sample_document.saveas(str(path))
+    reader = CadReader()
+    cad_doc = reader.read(path)
+    assert len(cad_doc.entities) == 8
+
+
+def test_cad_reader_raises_on_unsupported_format() -> None:
+    reader = CadReader()
+    with pytest.raises(ValueError, match="Formato nao suportado"):
+        reader.read(Path("test.pdf"))
+
+
+def test_cad_reader_converts_dwg_to_dxf_and_reads(
+    tmp_path: Path, mocker
+) -> None:
+    fake_cad_doc = CadDocument(
+        source_path=tmp_path / "test.dxf",
+        entities=(),
+        layers=(),
+        blocks=(),
+        text_styles=(),
+        dimension_styles=(),
+        metadata=DocumentMetadata(
+            author=None, dxf_version="AC1024",
+            last_saved_by=None, created=None, modified=None,
+        ),
+    )
+
+    mock_converter = mocker.patch(
+        "detector.dwg_converter.DwgConverter", autospec=True
+    )
+    mock_converter_instance = mock_converter.return_value
+    fake_dxf_path = tmp_path / "converted.dxf"
+    mock_converter_instance.convert.return_value = fake_dxf_path
+
+    mock_dxf_reader = mocker.Mock(spec=DxfReader)
+    mock_dxf_reader.read.return_value = fake_cad_doc
+
+    reader = CadReader(dxf_reader=mock_dxf_reader)
+    dwg_path = tmp_path / "test.dwg"
+    dwg_path.write_text("fake dwg content")
+
+    result = reader.read(dwg_path)
+
+    mock_converter_instance.convert.assert_called_once_with(dwg_path)
+    mock_dxf_reader.read.assert_called_once_with(fake_dxf_path)
+    assert result.source_path == fake_cad_doc.source_path
+
+
+

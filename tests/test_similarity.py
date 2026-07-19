@@ -180,25 +180,6 @@ def test_compare_styles_disjoint_layers_lowers_score(engine: SimilarityEngine) -
     assert engine.compare_styles(document_a, document_b) < 1.0
 
 
-def test_compare_metadata_matching_fields_yields_perfect_score(
-    engine: SimilarityEngine,
-) -> None:
-    document = _document()
-    assert engine.compare_metadata(document, document) == pytest.approx(1.0)
-
-
-def test_compare_metadata_different_authors_lowers_score(engine: SimilarityEngine) -> None:
-    document_a = _document(metadata=_metadata(author="Maria"))
-    document_b = _document(metadata=_metadata(author="Joao"))
-    assert engine.compare_metadata(document_a, document_b) < 1.0
-
-
-def test_compare_metadata_both_authors_missing_is_neutral(engine: SimilarityEngine) -> None:
-    document_a = _document(metadata=_metadata(author=None, last_saved_by=None))
-    document_b = _document(metadata=_metadata(author=None, last_saved_by=None))
-    assert engine.compare_metadata(document_a, document_b) == pytest.approx(2.0 / 3.0)
-
-
 def test_compute_score_identical_inputs_yields_maximum_score(engine: SimilarityEngine) -> None:
     feature = _feature_vector()
     metrics = _graph_metrics()
@@ -253,14 +234,13 @@ def test_compute_score_respects_custom_weights() -> None:
             "sequence": 0.0,
             "graph": 0.0,
             "styles": 0.0,
-            "metadata": 0.0,
         }
     )
     engine = SimilarityEngine(config=config)
     feature = _feature_vector()
     metrics = _graph_metrics()
-    document_a = _document(metadata=_metadata(author="Maria"))
-    document_b = _document(metadata=_metadata(author="Outro"), layers=("X",))
+    document_a = _document()
+    document_b = _document(layers=("X",))
     result = engine.compute_score(
         feature, feature, _sequence_result(0.0), metrics, metrics, document_a, document_b
     )

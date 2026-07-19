@@ -28,3 +28,6 @@ htmlcov/
 
 .DS_Store
 Thumbs.db
+
+# config local do ODA File Converter
+.config/

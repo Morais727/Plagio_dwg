@@ -1,73 +1,46 @@
 # Detector de Possível Plágio em Desenhos Técnicos CAD (DWG/DXF)
 
-Sistema em Python para analisar arquivos DWG/DXF produzidos em uma disciplina de desenho técnico e identificar pares suspeitos de cópia, gerando um índice de suspeita explicável (0–100). O sistema **não** acusa plágio automaticamente — apenas fornece evidências para revisão pelo professor.
+Sistema em Python para analisar arquivos DWG/DXF e identificar pares suspeitos de cópia, gerando um índice de suspeita explicável (0–100) para revisão pelo professor.
 
-## Pré-requisitos
+## Status
 
-- **Python 3.12+**
-- **ODA File Converter** (gratuito para uso acadêmico) — para converter arquivos `.dwg` em `.dxf`
-  - Download: https://www.opendesign.com/guestfiles/oda_file_converter
-- **xvfb** (opcional, recomendado) — para o ODA rodar sem abrir janela gráfica
-  - `sudo apt install xvfb`
+| Módulo | Status |
+|---|---|
+| `config.py` | ✅ |
+| `detector/reader.py` | ✅ |
+| `detector/normalizer.py` | ✅ |
+| `detector/features.py` | ⏳ |
+| `detector/graph.py` | ⏳ |
+| `detector/sequence.py` | ⏳ |
+| `detector/similarity.py` | ⏳ |
+| `detector/report.py` | ⏳ |
+| `detector/classifier.py` | ⏳ |
+| `ui/main_window.py` | ⏳ |
+| `app.py` | ⏳ |
+| Testes | ⏳ |
 
-## Instalação
-
-```bash
-# 1. Clonar o repositório
-git clone <url-do-repositorio>
-cd plagio_dwg
-
-# 2. Criar ambiente virtual (recomendado)
-python3 -m venv venv
-source venv/bin/activate
-
-# 3. Instalar dependências Python
-pip install -r requirements.txt
-
-# 4. Configurar o ODA File Converter
-python scripts/install_oda.py
-```
-
-O script `install_oda.py` irá:
-- Verificar se o ODA File Converter já está instalado
-- Abrir o navegador no site de download (se necessário)
-- Salvar o caminho do executável em `~/.config/plagio_dwg/oda_path`
-
-Para instalar o `xvfb` (elimina a janela gráfica do ODA):
-```bash
-sudo apt install xvfb
-```
-
-## Uso
-
-### Interface gráfica
-
-```bash
-python app.py
-```
-
-## Estrutura do projeto
+## Estrutura
 
 ```
 project/
-├── app.py                    # ponto de entrada da GUI
-├── config.py                 # configuração centralizada (pesos, paths, etc.)
+├── app.py                  # ponto de entrada (a implementar)
+├── config.py               # configuração centralizada
 ├── detector/
-│   ├── dwg_converter.py      # conversão DWG → DXF via ODA File Converter
-│   ├── reader.py             # leitura de arquivos DXF/DWG
-│   ├── normalizer.py         # normalização geométrica
-│   ├── features.py           # extração de características
-│   ├── graph.py              # construção de grafo (NetworkX)
-│   ├── sequence.py           # análise de sequência
-│   ├── similarity.py         # engine de similaridade
-│   ├── classifier.py         # ML supervisionado (opcional)
-│   └── report.py             # geração de relatórios PDF/HTML
+│   ├── reader.py           # leitura DXF (✅)
+│   ├── normalizer.py       # normalização geométrica (✅)
+│   ├── features.py         # extração de features (⏳)
+│   ├── graph.py            # grafo NetworkX (⏳)
+│   ├── sequence.py         # análise de sequência (⏳)
+│   ├── similarity.py       # engine de similaridade (⏳)
+│   ├── classifier.py       # ML opcional (⏳)
+│   └── report.py           # relatórios PDF/HTML (⏳)
 ├── ui/
-│   └── main_window.py        # interface PySide6
-├── scripts/
-│   └── install_oda.py        # script de instalação/configuração do ODA
-├── tests/                    # testes unitários e de integração
-├── data/                     # arquivos de entrada (DWG/DXF)
+│   └── main_window.py      # GUI PySide6 (⏳)
+├── tests/
+│   ├── test_reader.py      # (✅)
+│   ├── test_normalizer.py  # (✅)
+│   └── ...                 # (⏳)
+├── data/                   # arquivos de entrada
 ├── requirements.txt
 └── README.md
 ```
@@ -109,18 +82,78 @@ pytest
 pytest --cov=detector --cov-report=term-missing
 ```
 
+## Pipeline
+
+```
+Arquivos DXF → Reader → Normalizer → FeatureExtractor → SimilarityEngine → Score 0-100
+                                    → GraphBuilder       → 
+                                    → SequenceAnalyzer   → 
+                                                        → ReportGenerator → PDF/HTML
+```
+
+## Módulos
+
+### Reader (`detector/reader.py`)
+Lê arquivos DXF com `ezdxf`. Extrai entidades (LINE, ARC, CIRCLE, LWPOLYLINE, INSERT, TEXT, MTEXT, DIMENSION), layers, blocos, estilos de texto/cota e metadados (autor, versão, timestamps). Retorna um `CadDocument` imutável com todos os dados.
+
+### Normalizer (`detector/normalizer.py`)
+Remove diferenças irrelevantes de posição (centraliza na origem), rotação (alinha eixos principais via PCA) e escala (normaliza bounding box para tamanho unitário). Aplica a transformação a todas as coordenadas, comprimentos e ângulos das entidades.
+
+### FeatureExtractor (`detector/features.py`)
+Produz um `FeatureVector` imutável com:
+- **Contagem por tipo** de entidade (LINE, ARC, CIRCLE, etc.)
+- **Histograma de ângulos** (36 bins, 0–360°)
+- **Histograma de comprimentos** (20 bins)
+- **Bounding box** (largura, altura, área)
+- **Densidade espacial** (grade 10×10)
+- **Uso de layers** (quantidade por layer)
+- **Uso de blocos** (quantidade por bloco)
+- **Precisão decimal** (histograma de casas decimais usadas)
+
+### GraphBuilder (`detector/graph.py`)
+Constrói um grafo NetworkX onde cada nó é uma entidade e as arestas representam relações geométricas: interseção, paralelismo, perpendicularidade (entre segmentos) e tangência (entre círculos/arcos e segmentos). Extrai métricas: degree centrality, betweenness centrality, clustering coefficient, número de componentes.
+
+### SequenceAnalyzer (`detector/sequence.py`)
+Converte a sequência de entidades do arquivo em uma string de códigos (L, A, C, P, I, T, M, D). Compara pares de sequências usando LCS (Longest Common Subsequence) e distância Levenshtein via `RapidFuzz`. Suporta DTW (Dynamic Time Warping) como opção.
+
+### SimilarityEngine (`detector/similarity.py`)
+Combina 5 componentes em um score de 0 a 100 com pesos configuráveis:
+
+| Componente | Peso | Métrica |
+|---|---|---|
+| Geometria | 35% | Similaridade de histogramas, bounding box, contagens |
+| Sequência | 25% | LCS + Levenshtein normalizados |
+| Grafo | 20% | Densidade, centralidades, componentes |
+| Estilos/Layers | 10% | Jaccard entre conjuntos de layers, blocos, estilos |
+| Metadados | 10% | Autor, versão DXF, last saved by |
+
+Cada componente produz um score individual com justificativa textual.
+
+### ReportGenerator (`detector/report.py`)
+Gera relatório para cada par comparado contendo: índice de suspeita, score por componente, justificativa textual, tabela de métricas e imagens dos desenhos lado a lado (matplotlib). Exporta em **HTML** (visualização no navegador) e **PDF** (impressão).
+
+### GUI (`ui/main_window.py`)
+Interface PySide6 com:
+- Botão **Selecionar Pasta** — escolhe diretório com arquivos .dxf
+- Botão **Processar** — executa o pipeline completo em thread separada (não trava a界面)
+- **Barra de progresso** com status em tempo real
+- **Tabela ranking** — pares ordenados do maior score para o menor
+- **Clique em um par** → abre diálogo de comparação lado a lado com imagem, métricas e justificativa
+- **Botão Exportar PDF** — salva relatório individual
+
+### app.py
+Ponto de entrada. Inicializa a aplicação Qt e abre a janela principal.
+
 ## Tecnologias
 
-- Python 3.12+
-- ezdxf (leitura DXF)
-- NumPy (álgebra linear)
-- NetworkX (grafos)
-- pandas (tabelas)
-- RapidFuzz (comparação de sequências)
-- matplotlib (visualizações)
-- PySide6 (GUI)
-- ODA File Converter (conversão DWG → DXF)
-- pytest (testes)
+Python 3.12+, ezdxf, NumPy, SciPy, NetworkX, pandas, RapidFuzz, matplotlib, PySide6.
+
+## Como usar (em breve)
+
+```bash
+pip install -r requirements.txt
+python app.py
+```
 
 ## Licença
 

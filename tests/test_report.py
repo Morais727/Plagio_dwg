@@ -19,6 +19,7 @@ from detector.reader import (
     PolylineEntity,
     TextEntity,
 )
+from detector.corpus import build_corpus_context
 from detector.report import PairReport, ReportGenerator
 from detector.similarity import ComponentScore, SimilarityResult
 
@@ -45,7 +46,6 @@ def _document(
     return CadDocument(
         source_path=source_path,
         entities=entities,
-        layers=("0", "COTAS"),
         blocks=("BLOCO_A",),
         text_styles=("Standard",),
         dimension_styles=("Standard",),
@@ -55,33 +55,34 @@ def _document(
 
 def _all_entity_types_document(source_path: Optional[Path] = None) -> CadDocument:
     entities = (
-        LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(10.0, 10.0, 0.0)),
+        LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(10.0, 10.0, 0.0), linewidth=0),
         ArcEntity(
-            handle="2", layer="0", center=(0.0, 0.0, 0.0), radius=5.0,
-            start_angle=0.0, end_angle=90.0,
+            handle="2", center=(0.0, 0.0, 0.0), radius=5.0,
+            start_angle=0.0, end_angle=90.0, linewidth=0,
         ),
-        CircleEntity(handle="3", layer="0", center=(5.0, 5.0, 0.0), radius=2.0),
+        CircleEntity(handle="3", center=(5.0, 5.0, 0.0), radius=2.0, linewidth=0),
         PolylineEntity(
-            handle="4", layer="0",
+            handle="4",
             points=((0.0, 0.0), (1.0, 0.0), (1.0, 1.0)),
             closed=True,
+            linewidth=0,
         ),
         InsertEntity(
-            handle="5", layer="0", block_name="BLOCO_A",
+            handle="5", block_name="BLOCO_A",
             insert_point=(2.0, 2.0, 0.0), x_scale=1.0, y_scale=1.0, z_scale=1.0,
-            rotation=0.0,
+            rotation=0.0, linewidth=0,
         ),
         TextEntity(
-            handle="6", layer="0", text="A", insert_point=(1.0, 1.0, 0.0),
-            height=0.5, style="Standard",
+            handle="6", text="A", insert_point=(1.0, 1.0, 0.0),
+            height=0.5, style="Standard", linewidth=0,
         ),
         MTextEntity(
-            handle="7", layer="0", text="B", insert_point=(3.0, 3.0, 0.0),
-            char_height=0.5, style="Standard",
+            handle="7", text="B", insert_point=(3.0, 3.0, 0.0),
+            char_height=0.5, style="Standard", linewidth=0,
         ),
         DimensionEntity(
-            handle="8", layer="0", dim_type=0, style="Standard",
-            text_override="", measurement=10.0,
+            handle="8", insert_point=(5.0, 1.0, 0.0), dim_type=0, style="Standard",
+            text_override="", measurement=10.0, linewidth=0,
         ),
     )
     return _document(source_path=source_path, entities=entities)
@@ -92,7 +93,6 @@ def _similarity_result(total_score: float = 67.5) -> SimilarityResult:
         ComponentScore("geometry", 0.9, 0.35, "Geometria: 90.0% de similaridade"),
         ComponentScore("sequence", 0.8, 0.25, "Sequência: 80.0% de similaridade"),
         ComponentScore("graph", 0.5, 0.20, "Grafo: 50.0% de similaridade"),
-        ComponentScore("styles", 0.6, 0.10, "Estilos/Layers: 60.0% de similaridade"),
     )
     return SimilarityResult(total_score=total_score, component_scores=components)
 
@@ -102,7 +102,7 @@ def test_build_metrics_table_has_expected_columns_and_row_count(
 ) -> None:
     table = generator.build_metrics_table(_similarity_result())
     assert list(table.columns) == ["componente", "peso", "contribuicao", "score"]
-    assert len(table) == 4
+    assert len(table) == 3
     assert isinstance(table, pd.DataFrame)
 
 
@@ -255,6 +255,127 @@ def test_export_report_returns_html_and_pdf_paths(
     assert pdf_path == tmp_path / "par_1_2.pdf"
     assert html_path.exists()
     assert pdf_path.exists()
+
+
+def test_build_report_without_corpus_context_leaves_corpus_fields_none(
+    generator: ReportGenerator,
+) -> None:
+    document = _all_entity_types_document()
+    report = generator.build_report(document, document, _similarity_result())
+    assert report.corpus_sample_size is None
+    assert report.corpus_percentile is None
+    assert report.corpus_z_score is None
+
+
+def test_build_report_with_corpus_context_populates_corpus_fields(
+    generator: ReportGenerator,
+) -> None:
+    document = _all_entity_types_document()
+    corpus_context = build_corpus_context([40.0, 50.0, 60.0, 67.5])
+    report = generator.build_report(
+        document, document, _similarity_result(67.5), corpus_context=corpus_context
+    )
+    assert report.corpus_sample_size == 4
+    assert report.corpus_percentile == pytest.approx(100.0)
+    assert report.corpus_z_score is not None
+    assert report.corpus_z_score > 0.0
+
+
+def test_build_report_with_single_sample_corpus_leaves_fields_none(
+    generator: ReportGenerator,
+) -> None:
+    document = _all_entity_types_document()
+    corpus_context = build_corpus_context([67.5])
+    report = generator.build_report(
+        document, document, _similarity_result(67.5), corpus_context=corpus_context
+    )
+    assert report.corpus_sample_size is None
+
+
+def test_build_justification_mentions_corpus_percentile_when_context_given(
+    generator: ReportGenerator,
+) -> None:
+    corpus_context = build_corpus_context([40.0, 50.0, 60.0, 90.0])
+    justification = generator.build_justification(
+        _similarity_result(90.0), corpus_context=corpus_context
+    )
+    assert "percentil" in justification
+
+
+def test_build_justification_flags_outlier_relative_to_corpus(
+    generator: ReportGenerator,
+) -> None:
+    corpus_context = build_corpus_context([50.0, 50.0, 50.0, 50.0, 95.0])
+    justification = generator.build_justification(
+        _similarity_result(95.0), corpus_context=corpus_context
+    )
+    assert "outlier" in justification
+
+
+def test_build_justification_flags_typical_score_relative_to_corpus(
+    generator: ReportGenerator,
+) -> None:
+    corpus_context = build_corpus_context([84.0, 84.5, 83.5, 84.2])
+    justification = generator.build_justification(
+        _similarity_result(84.3), corpus_context=corpus_context
+    )
+    assert "gabarito" in justification
+
+
+def test_build_metrics_table_shows_na_for_inapplicable_component(
+    generator: ReportGenerator,
+) -> None:
+    components = (
+        ComponentScore("geometry", 0.9, 0.35, "Geometria: 90.0% de similaridade"),
+        ComponentScore(
+            "blocks", 0.0, 0.10, "Blocos: sem dados suficientes", applicable=False
+        ),
+    )
+    result = SimilarityResult(total_score=50.0, component_scores=components)
+    table = generator.build_metrics_table(result)
+    blocks_row = table[table["componente"] == "Blocos"].iloc[0]
+    assert pd.isna(blocks_row["score"])
+    assert pd.isna(blocks_row["contribuicao"])
+
+
+def test_generate_html_shows_na_for_inapplicable_component(
+    generator: ReportGenerator,
+) -> None:
+    document = _all_entity_types_document()
+    components = (
+        ComponentScore("geometry", 0.9, 0.35, "Geometria: 90.0% de similaridade"),
+        ComponentScore(
+            "blocks", 0.0, 0.10, "Blocos: sem dados suficientes", applicable=False
+        ),
+    )
+    result = SimilarityResult(total_score=50.0, component_scores=components)
+    report = generator.build_report(document, document, result)
+    html = generator.generate_html(report)
+    assert "N/A" in html
+    assert "score-na" in html
+
+
+def test_export_pdf_writes_valid_pdf_with_inapplicable_component(
+    generator: ReportGenerator,
+) -> None:
+    document = _all_entity_types_document()
+    components = (
+        ComponentScore("geometry", 0.9, 0.35, "Geometria: 90.0% de similaridade"),
+        ComponentScore(
+            "blocks", 0.0, 0.10, "Blocos: sem dados suficientes", applicable=False
+        ),
+    )
+    result = SimilarityResult(total_score=50.0, component_scores=components)
+    corpus_context = build_corpus_context([40.0, 50.0, 60.0])
+    report = generator.build_report(
+        document, document, result, corpus_context=corpus_context
+    )
+    tmp_path = Path(tempfile.mkdtemp())
+    output_path = tmp_path / "report.pdf"
+    generator.export_pdf(report, output_path)
+    with output_path.open("rb") as file_handle:
+        header = file_handle.read(5)
+    assert header == b"%PDF-"
 
 
 def test_export_report_defaults_to_config_output_dir() -> None:

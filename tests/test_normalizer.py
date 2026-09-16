@@ -41,7 +41,6 @@ def _document(entities: Tuple[CadEntity, ...]) -> CadDocument:
     return CadDocument(
         source_path=Path("sample.dxf"),
         entities=entities,
-        layers=("0",),
         blocks=(),
         text_styles=("Standard",),
         dimension_styles=("Standard",),
@@ -51,56 +50,57 @@ def _document(entities: Tuple[CadEntity, ...]) -> CadDocument:
 
 def _sample_entities() -> Tuple[CadEntity, ...]:
     return (
-        LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(10.0, 2.0, 0.0)),
-        LineEntity(handle="2", layer="0", start=(10.0, 2.0, 0.0), end=(7.0, 9.0, 0.0)),
+        LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(10.0, 2.0, 0.0), linewidth=0),
+        LineEntity(handle="2", start=(10.0, 2.0, 0.0), end=(7.0, 9.0, 0.0), linewidth=0),
         ArcEntity(
             handle="3",
-            layer="0",
             center=(3.0, 6.0, 0.0),
             radius=1.5,
             start_angle=10.0,
             end_angle=170.0,
+            linewidth=0,
         ),
-        CircleEntity(handle="4", layer="0", center=(4.0, 1.0, 0.0), radius=0.8),
+        CircleEntity(handle="4", center=(4.0, 1.0, 0.0), radius=0.8, linewidth=0),
         PolylineEntity(
             handle="5",
-            layer="0",
             points=((1.0, 1.0), (2.0, 3.0), (5.0, 0.5)),
             closed=True,
+            linewidth=0,
         ),
         InsertEntity(
             handle="6",
-            layer="0",
             block_name="B",
             insert_point=(6.0, 4.0, 0.0),
             x_scale=1.0,
             y_scale=1.0,
             z_scale=1.0,
             rotation=30.0,
+            linewidth=0,
         ),
         TextEntity(
             handle="7",
-            layer="0",
             text="hi",
             insert_point=(2.0, 8.0, 0.0),
             height=0.5,
             style="Standard",
+            linewidth=0,
         ),
         MTextEntity(
             handle="8",
-            layer="0",
             text="hi",
             insert_point=(8.0, 5.0, 0.0),
             char_height=0.5,
             style="Standard",
+            linewidth=0,
         ),
         DimensionEntity(
             handle="9",
-            layer="0",
+            insert_point=(0.0, 0.0, 0.0),
             dim_type=0,
             style="Standard",
             text_override="<>",
             measurement=10.0,
+            linewidth=0,
         ),
     )
 
@@ -132,44 +132,43 @@ def _transform_entities(
             transformed.append(
                 LineEntity(
                     handle=entity.handle,
-                    layer=entity.layer,
                     start=_rotate_scale_translate(
                         entity.start, angle_degrees, scale, translation
                     ),
                     end=_rotate_scale_translate(
                         entity.end, angle_degrees, scale, translation
                     ),
+                    linewidth=entity.linewidth,
                 )
             )
         elif isinstance(entity, ArcEntity):
             transformed.append(
                 ArcEntity(
                     handle=entity.handle,
-                    layer=entity.layer,
                     center=_rotate_scale_translate(
                         entity.center, angle_degrees, scale, translation
                     ),
                     radius=entity.radius * scale,
                     start_angle=(entity.start_angle + angle_degrees) % 360.0,
                     end_angle=(entity.end_angle + angle_degrees) % 360.0,
+                    linewidth=entity.linewidth,
                 )
             )
         elif isinstance(entity, CircleEntity):
             transformed.append(
                 CircleEntity(
                     handle=entity.handle,
-                    layer=entity.layer,
                     center=_rotate_scale_translate(
                         entity.center, angle_degrees, scale, translation
                     ),
                     radius=entity.radius * scale,
+                    linewidth=entity.linewidth,
                 )
             )
         elif isinstance(entity, PolylineEntity):
             transformed.append(
                 PolylineEntity(
                     handle=entity.handle,
-                    layer=entity.layer,
                     points=tuple(
                         _rotate_scale_translate(
                             (x, y, 0.0), angle_degrees, scale, translation
@@ -177,13 +176,13 @@ def _transform_entities(
                         for x, y in entity.points
                     ),
                     closed=entity.closed,
+                    linewidth=entity.linewidth,
                 )
             )
         elif isinstance(entity, InsertEntity):
             transformed.append(
                 InsertEntity(
                     handle=entity.handle,
-                    layer=entity.layer,
                     block_name=entity.block_name,
                     insert_point=_rotate_scale_translate(
                         entity.insert_point, angle_degrees, scale, translation
@@ -192,39 +191,40 @@ def _transform_entities(
                     y_scale=entity.y_scale * scale,
                     z_scale=entity.z_scale * scale,
                     rotation=(entity.rotation + angle_degrees) % 360.0,
+                    linewidth=entity.linewidth,
                 )
             )
         elif isinstance(entity, TextEntity):
             transformed.append(
                 TextEntity(
                     handle=entity.handle,
-                    layer=entity.layer,
                     text=entity.text,
                     insert_point=_rotate_scale_translate(
                         entity.insert_point, angle_degrees, scale, translation
                     ),
                     height=entity.height * scale,
                     style=entity.style,
+                    linewidth=entity.linewidth,
                 )
             )
         elif isinstance(entity, MTextEntity):
             transformed.append(
                 MTextEntity(
                     handle=entity.handle,
-                    layer=entity.layer,
                     text=entity.text,
                     insert_point=_rotate_scale_translate(
                         entity.insert_point, angle_degrees, scale, translation
                     ),
                     char_height=entity.char_height * scale,
                     style=entity.style,
+                    linewidth=entity.linewidth,
                 )
             )
         elif isinstance(entity, DimensionEntity):
             transformed.append(
                 DimensionEntity(
                     handle=entity.handle,
-                    layer=entity.layer,
+                    insert_point=entity.insert_point,
                     dim_type=entity.dim_type,
                     style=entity.style,
                     text_override=entity.text_override,
@@ -233,6 +233,7 @@ def _transform_entities(
                         if entity.measurement is not None
                         else None
                     ),
+                    linewidth=entity.linewidth,
                 )
             )
     return tuple(transformed)
@@ -284,7 +285,7 @@ def test_normalize_single_point_document_returns_identity_rotation_and_scale(
     normalizer: Normalizer,
 ) -> None:
     document = _document(
-        (CircleEntity(handle="1", layer="0", center=(5.0, 5.0, 0.0), radius=0.0),)
+        (CircleEntity(handle="1", center=(5.0, 5.0, 0.0), radius=0.0, linewidth=0),)
     )
     transform = normalizer.compute_transform(document)
     assert transform.rotation_matrix == ((1.0, 0.0), (0.0, 1.0))
@@ -314,11 +315,12 @@ def test_dimension_measurement_is_scaled_and_none_stays_none(
     entities = _sample_entities() + (
         DimensionEntity(
             handle="10",
-            layer="0",
+            insert_point=(0.0, 0.0, 0.0),
             dim_type=0,
             style="Standard",
             text_override="<>",
             measurement=None,
+            linewidth=0,
         ),
     )
     document = _document(entities)
@@ -403,7 +405,6 @@ def test_insert_and_text_entities_preserve_non_geometric_fields(
     insert = next(e for e in normalized.entities if isinstance(e, InsertEntity))
     text = next(e for e in normalized.entities if isinstance(e, TextEntity))
     assert insert.block_name == "B"
-    assert insert.layer == "0"
     assert text.text == "hi"
     assert text.style == "Standard"
 
@@ -412,7 +413,6 @@ def test_normalize_preserves_document_level_fields(normalizer: Normalizer) -> No
     document = _document(_sample_entities())
     normalized = normalizer.normalize(document)
     assert normalized.source_path == document.source_path
-    assert normalized.layers == document.layers
     assert normalized.blocks == document.blocks
     assert normalized.metadata == document.metadata
     assert len(normalized.entities) == len(document.entities)

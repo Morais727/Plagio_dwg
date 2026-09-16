@@ -186,6 +186,10 @@ def _run_pipeline(
         sequence_analyzer.build_sequence(normalized_a),
         sequence_analyzer.build_sequence(normalized_b),
     )
+    text_sequence_result = sequence_analyzer.compare_text_sequence(
+        sequence_analyzer.build_text_sequence(normalized_a),
+        sequence_analyzer.build_text_sequence(normalized_b),
+    )
 
     engine = SimilarityEngine(config)
     return engine.compute_score(
@@ -194,6 +198,7 @@ def _run_pipeline(
         sequence_result,
         metrics_a,
         metrics_b,
+        text_sequence_result,
         normalized_a,
         normalized_b,
     )

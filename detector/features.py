@@ -54,9 +54,10 @@ class FeatureVector:
     length_histogram: Tuple[float, ...]
     bounding_box: BoundingBox
     spatial_density: Tuple[float, ...]
-    layer_entity_counts: Tuple[Tuple[str, int], ...]
     block_usage_counts: Tuple[Tuple[str, int], ...]
     decimal_precision_histogram: Tuple[float, ...]
+    dimension_distance_histogram: Tuple[float, ...]
+    text_positions: Tuple[Tuple[str, float, float], ...]
 
 
 def _distance2d(a: Point2D, b: Point2D) -> float:
@@ -221,6 +222,8 @@ class FeatureExtractor:
         points = self._all_points(entities)
         length_samples = _length_samples(entities)
         length_maximum = max(length_samples) if length_samples else 1.0
+        dimension_distances = self._dimension_distances(entities)
+        dim_distance_max = max(dimension_distances) if dimension_distances else 1.0
         return FeatureVector(
             entity_type_counts=self._entity_type_counts(entities),
             angle_histogram=_histogram(
@@ -231,9 +234,12 @@ class FeatureExtractor:
             ),
             bounding_box=self._bounding_box(points),
             spatial_density=self._spatial_density(points),
-            layer_entity_counts=self._layer_entity_counts(entities),
             block_usage_counts=self._block_usage_counts(entities),
             decimal_precision_histogram=self._decimal_precision_histogram(entities),
+            dimension_distance_histogram=_histogram(
+                dimension_distances, self._config.dimension_distance_bins, 0.0, dim_distance_max
+            ),
+            text_positions=self._text_positions(entities),
         )
 
     def _all_points(self, entities: Sequence[CadEntity]) -> List[Point2D]:
@@ -282,14 +288,6 @@ class FeatureExtractor:
         total = float(sum(counts))
         return tuple(count / total for count in counts)
 
-    def _layer_entity_counts(
-        self, entities: Sequence[CadEntity]
-    ) -> Tuple[Tuple[str, int], ...]:
-        counts: Dict[str, int] = {}
-        for entity in entities:
-            counts[entity.layer] = counts.get(entity.layer, 0) + 1
-        return tuple(sorted(counts.items()))
-
     def _block_usage_counts(
         self, entities: Sequence[CadEntity]
     ) -> Tuple[Tuple[str, int], ...]:
@@ -310,3 +308,44 @@ class FeatureExtractor:
         if total <= 0.0:
             return tuple(0.0 for _ in counts)
         return tuple(count / total for count in counts)
+
+    def _dimension_distances(
+        self, entities: Sequence[CadEntity]
+    ) -> List[float]:
+        geometry_points: List[Point2D] = []
+        for entity in entities:
+            if isinstance(entity, (LineEntity, ArcEntity, CircleEntity, PolylineEntity)):
+                geometry_points.extend(_representative_points(entity))
+        if not geometry_points:
+            return []
+        distances: List[float] = []
+        for entity in entities:
+            if isinstance(entity, DimensionEntity):
+                dim_point = (entity.insert_point[0], entity.insert_point[1])
+                nearest = min(_distance2d(dim_point, gp) for gp in geometry_points)
+                if nearest > _EPSILON:
+                    distances.append(nearest)
+        return distances
+
+    def _text_positions(
+        self, entities: Sequence[CadEntity]
+    ) -> Tuple[Tuple[str, float, float], ...]:
+        positions: List[Tuple[str, float, float]] = []
+        for entity in entities:
+            if isinstance(entity, TextEntity):
+                normalized = " ".join(entity.text.strip().split()).lower()
+                if normalized:
+                    positions.append((
+                        normalized,
+                        entity.insert_point[0],
+                        entity.insert_point[1],
+                    ))
+            elif isinstance(entity, MTextEntity):
+                normalized = " ".join(entity.text.strip().split()).lower()
+                if normalized:
+                    positions.append((
+                        normalized,
+                        entity.insert_point[0],
+                        entity.insert_point[1],
+                    ))
+        return tuple(positions)

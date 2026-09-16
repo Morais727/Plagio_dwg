@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Dict, Optional, Type
+from typing import Dict, List, Optional, Type
 
 from rapidfuzz.distance import LCSseq, Levenshtein
 
@@ -47,6 +47,14 @@ class SequenceComparisonResult:
     dtw_distance: Optional[float]
 
 
+@dataclass(frozen=True)
+class TextSequenceComparisonResult:
+    text_a_length: int
+    text_b_length: int
+    levenshtein_ratio: float
+    combined_score: float
+
+
 def entity_code(entity: CadEntity) -> str:
     return _ENTITY_CODES.get(type(entity), _UNKNOWN_ENTITY_CODE)
 
@@ -57,6 +65,31 @@ class SequenceAnalyzer:
 
     def build_sequence(self, document: CadDocument) -> str:
         return "".join(entity_code(entity) for entity in document.entities)
+
+    def build_text_sequence(self, document: CadDocument) -> str:
+        texts: List[str] = []
+        for entity in document.entities:
+            if isinstance(entity, (TextEntity, MTextEntity)):
+                normalized = " ".join(entity.text.strip().split()).lower()
+                if normalized:
+                    texts.append(normalized)
+        return "\n".join(texts)
+
+    def compare_text_sequence(
+        self, text_a: str, text_b: str
+    ) -> TextSequenceComparisonResult:
+        if not text_a and not text_b:
+            ratio = 1.0
+        elif not text_a or not text_b:
+            ratio = 0.0
+        else:
+            ratio = Levenshtein.normalized_similarity(text_a, text_b)
+        return TextSequenceComparisonResult(
+            text_a_length=len(text_a),
+            text_b_length=len(text_b),
+            levenshtein_ratio=ratio,
+            combined_score=ratio,
+        )
 
     def compare(
         self, sequence_a: str, sequence_b: str, include_dtw: bool = False

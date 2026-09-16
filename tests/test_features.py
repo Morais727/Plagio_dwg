@@ -45,7 +45,6 @@ def _document(entities: Tuple[CadEntity, ...]) -> CadDocument:
     return CadDocument(
         source_path=Path("sample.dxf"),
         entities=entities,
-        layers=("0",),
         blocks=(),
         text_styles=("Standard",),
         dimension_styles=("Standard",),
@@ -55,66 +54,67 @@ def _document(entities: Tuple[CadEntity, ...]) -> CadDocument:
 
 def _sample_entities() -> Tuple[CadEntity, ...]:
     return (
-        LineEntity(handle="1", layer="GEOMETRY", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0)),
-        LineEntity(handle="2", layer="GEOMETRY", start=(0.0, 0.0, 0.0), end=(0.0, 5.0, 0.0)),
+        LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0), linewidth=0),
+        LineEntity(handle="2", start=(0.0, 0.0, 0.0), end=(0.0, 5.0, 0.0), linewidth=0),
         ArcEntity(
             handle="3",
-            layer="GEOMETRY",
             center=(3.0, 6.0, 0.0),
             radius=1.5,
             start_angle=10.0,
             end_angle=170.0,
+            linewidth=0,
         ),
-        CircleEntity(handle="4", layer="GEOMETRY", center=(4.0, 1.0, 0.0), radius=0.8),
+        CircleEntity(handle="4", center=(4.0, 1.0, 0.0), radius=0.8, linewidth=0),
         PolylineEntity(
             handle="5",
-            layer="GEOMETRY",
             points=((1.0, 1.0), (2.0, 3.0), (5.0, 0.5)),
             closed=True,
+            linewidth=0,
         ),
         InsertEntity(
             handle="6",
-            layer="BLOCKS",
             block_name="PARAFUSO",
             insert_point=(6.0, 4.0, 0.0),
             x_scale=1.0,
             y_scale=1.0,
             z_scale=1.0,
             rotation=30.0,
+            linewidth=0,
         ),
         InsertEntity(
             handle="7",
-            layer="BLOCKS",
             block_name="PARAFUSO",
             insert_point=(2.0, 2.0, 0.0),
             x_scale=1.0,
             y_scale=1.0,
             z_scale=1.0,
             rotation=90.0,
+            linewidth=0,
         ),
         TextEntity(
             handle="8",
-            layer="TEXT",
             text="hi",
             insert_point=(2.0, 8.0, 0.0),
             height=0.5,
             style="Standard",
+            linewidth=0,
         ),
         MTextEntity(
             handle="9",
-            layer="TEXT",
             text="hi",
             insert_point=(8.0, 5.0, 0.0),
             char_height=0.5,
             style="Standard",
+            linewidth=0,
         ),
         DimensionEntity(
             handle="10",
-            layer="DIMENSIONS",
+            insert_point=(5.0, 1.0, 0.0),
             dim_type=0,
             style="Standard",
             text_override="<>",
             measurement=10.0,
+            linewidth=0,
         ),
     )
 
@@ -183,7 +183,7 @@ def test_angle_histogram_is_all_zero_without_angle_data(
     extractor: FeatureExtractor,
 ) -> None:
     document = _document(
-        (CircleEntity(handle="1", layer="0", center=(0.0, 0.0, 0.0), radius=1.0),)
+        (CircleEntity(handle="1", center=(0.0, 0.0, 0.0), radius=1.0, linewidth=0),)
     )
     result = extractor.extract(document)
     assert sum(result.angle_histogram) == pytest.approx(0.0)
@@ -191,7 +191,7 @@ def test_angle_histogram_is_all_zero_without_angle_data(
 
 def test_horizontal_line_falls_into_zero_degree_bin(extractor: FeatureExtractor) -> None:
     document = _document(
-        (LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(1.0, 0.0, 0.0)),)
+        (LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(1.0, 0.0, 0.0), linewidth=0),)
     )
     result = extractor.extract(document)
     assert result.angle_histogram[0] == pytest.approx(1.0)
@@ -223,8 +223,8 @@ def test_length_histogram_is_all_zero_without_length_data(
 def test_longest_line_falls_into_last_length_bin(extractor: FeatureExtractor) -> None:
     document = _document(
         (
-            LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(1.0, 0.0, 0.0)),
-            LineEntity(handle="2", layer="0", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0)),
+            LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(1.0, 0.0, 0.0), linewidth=0),
+            LineEntity(handle="2", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0), linewidth=0),
         )
     )
     result = extractor.extract(document)
@@ -255,7 +255,7 @@ def test_bounding_box_is_all_zero_for_empty_document(
 def test_bounding_box_includes_circle_extremes() -> None:
     extractor = FeatureExtractor()
     document = _document(
-        (CircleEntity(handle="1", layer="0", center=(5.0, 5.0, 0.0), radius=2.0),)
+        (CircleEntity(handle="1", center=(5.0, 5.0, 0.0), radius=2.0, linewidth=0),)
     )
     result = extractor.extract(document)
     box = result.bounding_box
@@ -295,24 +295,6 @@ def test_spatial_density_uses_custom_grid_size() -> None:
     assert len(result.spatial_density) == 16
 
 
-def test_layer_entity_counts_reflect_actual_usage(extractor: FeatureExtractor) -> None:
-    document = _document(_sample_entities())
-    result = extractor.extract(document)
-    counts = dict(result.layer_entity_counts)
-    assert counts["GEOMETRY"] == 5
-    assert counts["BLOCKS"] == 2
-    assert counts["TEXT"] == 2
-    assert counts["DIMENSIONS"] == 1
-
-
-def test_layer_entity_counts_empty_for_empty_document(
-    extractor: FeatureExtractor,
-) -> None:
-    document = _document(())
-    result = extractor.extract(document)
-    assert result.layer_entity_counts == ()
-
-
 def test_block_usage_counts_reflect_insert_references(
     extractor: FeatureExtractor,
 ) -> None:
@@ -324,7 +306,7 @@ def test_block_usage_counts_reflect_insert_references(
 
 def test_block_usage_counts_empty_without_inserts(extractor: FeatureExtractor) -> None:
     document = _document(
-        (LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(1.0, 0.0, 0.0)),)
+        (LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(1.0, 0.0, 0.0), linewidth=0),)
     )
     result = extractor.extract(document)
     assert result.block_usage_counts == ()
@@ -348,7 +330,7 @@ def test_decimal_precision_histogram_detects_integer_values(
     extractor: FeatureExtractor,
 ) -> None:
     document = _document(
-        (LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0)),)
+        (LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0), linewidth=0),)
     )
     result = extractor.extract(document)
     assert result.decimal_precision_histogram[0] == pytest.approx(1.0)
@@ -360,7 +342,7 @@ def test_decimal_precision_histogram_detects_two_decimal_places(
     document = _document(
         (
             LineEntity(
-                handle="1", layer="0", start=(0.12, 0.0, 0.0), end=(10.34, 0.0, 0.0)
+                handle="1", start=(0.12, 0.0, 0.0), end=(10.34, 0.0, 0.0), linewidth=0
             ),
         )
     )

@@ -107,9 +107,7 @@ def test_line_entity_extraction(
     )
     assert line.start == (0.0, 0.0, 0.0)
     assert line.end == (1.0, 1.0, 0.0)
-    assert line.layer == "GEOMETRY"
     assert isinstance(line.handle, str) and line.handle
-
 
 def test_arc_entity_extraction(
     reader: DxfReader, sample_document: Drawing
@@ -158,7 +156,6 @@ def test_insert_entity_extraction(
     assert insert.block_name == "MYBLOCK"
     assert insert.insert_point == (5.0, 5.0, 0.0)
     assert insert.rotation == 45.0
-    assert insert.layer == "BLOCKS"
 
 
 def test_text_entity_extraction(
@@ -195,16 +192,6 @@ def test_dimension_entity_extraction(
     )
     assert dimension.style == "Standard"
     assert dimension.measurement == pytest.approx(1.0)
-
-
-def test_layers_are_extracted(
-    reader: DxfReader, sample_document: Drawing
-) -> None:
-    cad_document = reader.read_document(sample_document)
-    assert "GEOMETRY" in cad_document.layers
-    assert "BLOCKS" in cad_document.layers
-    assert "TEXT" in cad_document.layers
-    assert "DIMENSIONS" in cad_document.layers
 
 
 def test_blocks_exclude_internal_model_and_paper_space(
@@ -320,6 +307,9 @@ def test_dimension_measurement_is_none_when_unavailable(reader: DxfReader) -> No
         dimstyle = "Standard"
         text = "<>"
 
+        def __init__(self) -> None:
+            self.defpoint = (0.0, 0.0, 0.0)
+
     class BrokenDimensionEntity:
         dxf = BrokenDimensionDxf()
 
@@ -352,7 +342,6 @@ def test_cad_reader_converts_dwg_to_dxf_and_reads(
     fake_cad_doc = CadDocument(
         source_path=tmp_path / "test.dxf",
         entities=(),
-        layers=(),
         blocks=(),
         text_styles=(),
         dimension_styles=(),

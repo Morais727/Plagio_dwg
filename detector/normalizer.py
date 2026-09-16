@@ -202,6 +202,7 @@ class Normalizer:
             measurement = entity.measurement
             return replace(
                 entity,
+                insert_point=transform.transform_point3d(entity.insert_point),
                 measurement=(
                     transform.transform_length(measurement)
                     if measurement is not None

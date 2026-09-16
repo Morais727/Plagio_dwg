@@ -39,7 +39,6 @@ def _document(entities: Tuple[CadEntity, ...]) -> CadDocument:
     return CadDocument(
         source_path=Path("sample.dxf"),
         entities=entities,
-        layers=("0",),
         blocks=(),
         text_styles=("Standard",),
         dimension_styles=("Standard",),
@@ -48,51 +47,51 @@ def _document(entities: Tuple[CadEntity, ...]) -> CadDocument:
 
 
 def _line() -> LineEntity:
-    return LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(1.0, 0.0, 0.0))
+    return LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(1.0, 0.0, 0.0), linewidth=0)
 
 
 def _arc() -> ArcEntity:
     return ArcEntity(
-        handle="2", layer="0", center=(0.0, 0.0, 0.0), radius=1.0, start_angle=0.0, end_angle=90.0
+        handle="2", center=(0.0, 0.0, 0.0), radius=1.0, start_angle=0.0, end_angle=90.0, linewidth=0
     )
 
 
 def _circle() -> CircleEntity:
-    return CircleEntity(handle="3", layer="0", center=(0.0, 0.0, 0.0), radius=1.0)
+    return CircleEntity(handle="3", center=(0.0, 0.0, 0.0), radius=1.0, linewidth=0)
 
 
 def _polyline() -> PolylineEntity:
-    return PolylineEntity(handle="4", layer="0", points=((0.0, 0.0), (1.0, 0.0)), closed=False)
+    return PolylineEntity(handle="4", points=((0.0, 0.0), (1.0, 0.0)), closed=False, linewidth=0)
 
 
 def _insert() -> InsertEntity:
     return InsertEntity(
         handle="5",
-        layer="0",
         block_name="X",
         insert_point=(0.0, 0.0, 0.0),
         x_scale=1.0,
         y_scale=1.0,
         z_scale=1.0,
         rotation=0.0,
+        linewidth=0,
     )
 
 
 def _text() -> TextEntity:
     return TextEntity(
-        handle="6", layer="0", text="hi", insert_point=(0.0, 0.0, 0.0), height=0.5, style="Standard"
+        handle="6", text="hi", insert_point=(0.0, 0.0, 0.0), height=0.5, style="Standard", linewidth=0
     )
 
 
 def _mtext() -> MTextEntity:
     return MTextEntity(
-        handle="7", layer="0", text="hi", insert_point=(0.0, 0.0, 0.0), char_height=0.5, style="Standard"
+        handle="7", text="hi", insert_point=(0.0, 0.0, 0.0), char_height=0.5, style="Standard", linewidth=0
     )
 
 
 def _dimension() -> DimensionEntity:
     return DimensionEntity(
-        handle="8", layer="0", dim_type=0, style="Standard", text_override="<>", measurement=1.0
+        handle="8", insert_point=(0.0, 1.0, 0.0), dim_type=0, style="Standard", text_override="<>", measurement=1.0, linewidth=0
     )
 
 

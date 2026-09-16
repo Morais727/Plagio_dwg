@@ -1,5 +1,3 @@
-from datetime import datetime
-from pathlib import Path
 from typing import Optional, Tuple
 
 import pytest
@@ -7,8 +5,8 @@ import pytest
 from config import Config
 from detector.features import BoundingBox, FeatureVector
 from detector.graph import GraphMetrics
-from detector.reader import CadDocument, DocumentMetadata
-from detector.sequence import SequenceComparisonResult
+from detector.reader import CadDocument, DocumentMetadata, LineEntity
+from detector.sequence import SequenceComparisonResult, TextSequenceComparisonResult
 from detector.similarity import ComponentScore, SimilarityEngine, SimilarityResult
 
 
@@ -30,9 +28,10 @@ def _feature_vector(
     length_histogram: Tuple[float, ...] = (0.5, 0.5),
     bounding_box: Optional[BoundingBox] = None,
     spatial_density: Tuple[float, ...] = (0.25, 0.25, 0.25, 0.25),
-    layer_entity_counts: Tuple[Tuple[str, int], ...] = (("0", 6),),
     block_usage_counts: Tuple[Tuple[str, int], ...] = (),
     decimal_precision_histogram: Tuple[float, ...] = (1.0,),
+    dimension_distance_histogram: Tuple[float, ...] = (1.0,),
+    text_positions: Tuple[Tuple[str, float, float], ...] = (),
 ) -> FeatureVector:
     return FeatureVector(
         entity_type_counts=entity_type_counts,
@@ -40,9 +39,10 @@ def _feature_vector(
         length_histogram=length_histogram,
         bounding_box=bounding_box if bounding_box is not None else _bounding_box(),
         spatial_density=spatial_density,
-        layer_entity_counts=layer_entity_counts,
         block_usage_counts=block_usage_counts,
         decimal_precision_histogram=decimal_precision_histogram,
+        dimension_distance_histogram=dimension_distance_histogram,
+        text_positions=text_positions,
     )
 
 
@@ -77,35 +77,36 @@ def _sequence_result(combined_score: float) -> SequenceComparisonResult:
     )
 
 
-def _metadata(
-    author: str = "Maria",
-    dxf_version: str = "AC1032",
-    last_saved_by: str = "Maria",
-) -> DocumentMetadata:
-    return DocumentMetadata(
-        author=author,
-        dxf_version=dxf_version,
-        last_saved_by=last_saved_by,
-        created=datetime(2026, 1, 1),
-        modified=datetime(2026, 1, 2),
+def _text_sequence_result(combined_score: float = 1.0) -> TextSequenceComparisonResult:
+    return TextSequenceComparisonResult(
+        text_a_length=2,
+        text_b_length=2,
+        levenshtein_ratio=combined_score,
+        combined_score=combined_score,
     )
 
 
-def _document(
-    layers: Tuple[str, ...] = ("0", "COTAS"),
-    blocks: Tuple[str, ...] = ("BLOCO_A",),
+def _metadata() -> DocumentMetadata:
+    return DocumentMetadata(
+        author="Aluno A",
+        dxf_version="AC1027",
+        last_saved_by="Aluno A",
+        created=None,
+        modified=None,
+    )
+
+
+def _cad_document(
     text_styles: Tuple[str, ...] = ("Standard",),
     dimension_styles: Tuple[str, ...] = ("Standard",),
-    metadata: Optional[DocumentMetadata] = None,
 ) -> CadDocument:
     return CadDocument(
-        source_path=Path("sample.dxf"),
+        source_path=None,
         entities=(),
-        layers=layers,
-        blocks=blocks,
+        blocks=(),
         text_styles=text_styles,
         dimension_styles=dimension_styles,
-        metadata=metadata if metadata is not None else _metadata(),
+        metadata=_metadata(),
     )
 
 
@@ -167,25 +168,12 @@ def test_compare_graph_single_node_has_zero_density(engine: SimilarityEngine) ->
     assert engine.compare_graph(single_node, single_node) == pytest.approx(1.0)
 
 
-def test_compare_styles_identical_documents_yields_perfect_score(
-    engine: SimilarityEngine,
-) -> None:
-    document = _document()
-    assert engine.compare_styles(document, document) == pytest.approx(1.0)
-
-
-def test_compare_styles_disjoint_layers_lowers_score(engine: SimilarityEngine) -> None:
-    document_a = _document(layers=("0", "COTAS"))
-    document_b = _document(layers=("EIXO", "HACHURA"))
-    assert engine.compare_styles(document_a, document_b) < 1.0
-
-
 def test_compute_score_identical_inputs_yields_maximum_score(engine: SimilarityEngine) -> None:
     feature = _feature_vector()
     metrics = _graph_metrics()
-    document = _document()
     result = engine.compute_score(
-        feature, feature, _sequence_result(1.0), metrics, metrics, document, document
+        feature, feature, _sequence_result(1.0), metrics, metrics, _text_sequence_result(),
+        _cad_document(), _cad_document(),
     )
     assert isinstance(result, SimilarityResult)
     assert result.total_score == pytest.approx(100.0)
@@ -194,9 +182,9 @@ def test_compute_score_identical_inputs_yields_maximum_score(engine: SimilarityE
 def test_compute_score_component_weights_match_config(engine: SimilarityEngine) -> None:
     feature = _feature_vector()
     metrics = _graph_metrics()
-    document = _document()
     result = engine.compute_score(
-        feature, feature, _sequence_result(1.0), metrics, metrics, document, document
+        feature, feature, _sequence_result(1.0), metrics, metrics, _text_sequence_result(),
+        _cad_document(), _cad_document(),
     )
     config = Config()
     for component in result.component_scores:
@@ -206,9 +194,9 @@ def test_compute_score_component_weights_match_config(engine: SimilarityEngine) 
 def test_compute_score_lookup_by_name(engine: SimilarityEngine) -> None:
     feature = _feature_vector()
     metrics = _graph_metrics()
-    document = _document()
     result = engine.compute_score(
-        feature, feature, _sequence_result(1.0), metrics, metrics, document, document
+        feature, feature, _sequence_result(1.0), metrics, metrics, _text_sequence_result(),
+        _cad_document(), _cad_document(),
     )
     geometry = result.component("geometry")
     assert isinstance(geometry, ComponentScore)
@@ -219,9 +207,9 @@ def test_compute_score_lookup_by_name(engine: SimilarityEngine) -> None:
 def test_compute_score_unknown_component_raises_key_error(engine: SimilarityEngine) -> None:
     feature = _feature_vector()
     metrics = _graph_metrics()
-    document = _document()
     result = engine.compute_score(
-        feature, feature, _sequence_result(1.0), metrics, metrics, document, document
+        feature, feature, _sequence_result(1.0), metrics, metrics, _text_sequence_result(),
+        _cad_document(), _cad_document(),
     )
     with pytest.raises(KeyError):
         result.component("unknown")
@@ -233,16 +221,14 @@ def test_compute_score_respects_custom_weights() -> None:
             "geometry": 1.0,
             "sequence": 0.0,
             "graph": 0.0,
-            "styles": 0.0,
         }
     )
     engine = SimilarityEngine(config=config)
     feature = _feature_vector()
     metrics = _graph_metrics()
-    document_a = _document()
-    document_b = _document(layers=("X",))
     result = engine.compute_score(
-        feature, feature, _sequence_result(0.0), metrics, metrics, document_a, document_b
+        feature, feature, _sequence_result(0.0), metrics, metrics, _text_sequence_result(),
+        _cad_document(), _cad_document(),
     )
     assert result.total_score == pytest.approx(100.0)
 
@@ -252,14 +238,14 @@ def test_compute_score_is_deterministic(engine: SimilarityEngine) -> None:
     feature_b = _feature_vector(entity_type_counts=(("LINE", 3), ("CIRCLE", 1)))
     metrics_a = _graph_metrics()
     metrics_b = _graph_metrics(node_count=3, edge_count=2, component_count=1)
-    document_a = _document()
-    document_b = _document(layers=("0",))
     sequence_result = _sequence_result(0.6)
     first = engine.compute_score(
-        feature_a, feature_b, sequence_result, metrics_a, metrics_b, document_a, document_b
+        feature_a, feature_b, sequence_result, metrics_a, metrics_b, _text_sequence_result(),
+        _cad_document(), _cad_document(),
     )
     second = engine.compute_score(
-        feature_a, feature_b, sequence_result, metrics_a, metrics_b, document_a, document_b
+        feature_a, feature_b, sequence_result, metrics_a, metrics_b, _text_sequence_result(),
+        _cad_document(), _cad_document(),
     )
     assert first == second
 
@@ -267,9 +253,9 @@ def test_compute_score_is_deterministic(engine: SimilarityEngine) -> None:
 def test_similarity_result_is_frozen(engine: SimilarityEngine) -> None:
     feature = _feature_vector()
     metrics = _graph_metrics()
-    document = _document()
     result = engine.compute_score(
-        feature, feature, _sequence_result(1.0), metrics, metrics, document, document
+        feature, feature, _sequence_result(1.0), metrics, metrics, _text_sequence_result(),
+        _cad_document(), _cad_document(),
     )
     with pytest.raises(Exception):
         result.total_score = 0.0  # type: ignore[misc]
@@ -278,9 +264,190 @@ def test_similarity_result_is_frozen(engine: SimilarityEngine) -> None:
 def test_component_score_is_frozen(engine: SimilarityEngine) -> None:
     feature = _feature_vector()
     metrics = _graph_metrics()
-    document = _document()
     result = engine.compute_score(
-        feature, feature, _sequence_result(1.0), metrics, metrics, document, document
+        feature, feature, _sequence_result(1.0), metrics, metrics, _text_sequence_result(),
+        _cad_document(), _cad_document(),
     )
     with pytest.raises(Exception):
         result.component_scores[0].score = 0.0  # type: ignore[misc]
+
+
+def test_compare_blocks_identical_blocks_yields_perfect_score(
+    engine: SimilarityEngine,
+) -> None:
+    feature = _feature_vector(block_usage_counts=(("PARAFUSO", 3), ("PORCA", 1)))
+    assert engine.compare_blocks(feature, feature) == pytest.approx(1.0)
+
+
+def test_compare_blocks_completely_different_blocks_yields_zero(
+    engine: SimilarityEngine,
+) -> None:
+    feature_a = _feature_vector(block_usage_counts=(("PARAFUSO", 3),))
+    feature_b = _feature_vector(block_usage_counts=(("ARRUELA", 3),))
+    assert engine.compare_blocks(feature_a, feature_b) == pytest.approx(0.0)
+
+
+def test_compare_blocks_partial_overlap_yields_intermediate_score(
+    engine: SimilarityEngine,
+) -> None:
+    feature_a = _feature_vector(block_usage_counts=(("PARAFUSO", 2), ("PORCA", 1)))
+    feature_b = _feature_vector(block_usage_counts=(("PARAFUSO", 2), ("ARRUELA", 1)))
+    score = engine.compare_blocks(feature_a, feature_b)
+    assert 0.0 < score < 1.0
+
+
+def test_compare_blocks_no_blocks_in_either_is_not_applicable(
+    engine: SimilarityEngine,
+) -> None:
+    feature_a = _feature_vector(block_usage_counts=())
+    feature_b = _feature_vector(block_usage_counts=())
+    assert engine.compare_blocks(feature_a, feature_b) is None
+
+
+def test_compare_styles_same_styles_yields_perfect_score(
+    engine: SimilarityEngine,
+) -> None:
+    doc = _cad_document()
+    assert engine.compare_styles(doc, doc) == pytest.approx(1.0)
+
+
+def test_compare_styles_different_styles_yields_zero(
+    engine: SimilarityEngine,
+) -> None:
+    doc_a = _cad_document(text_styles=("Standard",), dimension_styles=("ISO-25",))
+    doc_b = _cad_document(text_styles=("Arial",), dimension_styles=("DIN",))
+    assert engine.compare_styles(doc_a, doc_b) == pytest.approx(0.0)
+
+
+def test_compare_decimal_precision_identical_histograms_yields_perfect_score(
+    engine: SimilarityEngine,
+) -> None:
+    feature = _feature_vector(decimal_precision_histogram=(0.2, 0.3, 0.5))
+    assert engine.compare_decimal_precision(feature, feature) == pytest.approx(1.0)
+
+
+def test_compare_decimal_precision_disjoint_histograms_yields_zero(
+    engine: SimilarityEngine,
+) -> None:
+    feature_a = _feature_vector(decimal_precision_histogram=(1.0, 0.0))
+    feature_b = _feature_vector(decimal_precision_histogram=(0.0, 1.0))
+    assert engine.compare_decimal_precision(feature_a, feature_b) == pytest.approx(0.0)
+
+
+def test_compare_decimal_precision_both_zero_is_not_applicable(
+    engine: SimilarityEngine,
+) -> None:
+    feature_a = _feature_vector(decimal_precision_histogram=(0.0, 0.0))
+    feature_b = _feature_vector(decimal_precision_histogram=(0.0, 0.0))
+    assert engine.compare_decimal_precision(feature_a, feature_b) is None
+
+
+def test_compare_dimensions_both_absent_is_not_applicable(
+    engine: SimilarityEngine,
+) -> None:
+    feature_a = _feature_vector(dimension_distance_histogram=(0.0, 0.0))
+    feature_b = _feature_vector(dimension_distance_histogram=(0.0, 0.0))
+    assert engine.compare_dimensions(feature_a, feature_b) is None
+
+
+def test_compare_dimensions_present_in_one_only_is_dissimilar(
+    engine: SimilarityEngine,
+) -> None:
+    feature_a = _feature_vector(dimension_distance_histogram=(1.0, 0.0))
+    feature_b = _feature_vector(dimension_distance_histogram=(0.0, 0.0))
+    assert engine.compare_dimensions(feature_a, feature_b) == pytest.approx(0.0)
+
+
+def test_compare_styles_both_absent_is_not_applicable(
+    engine: SimilarityEngine,
+) -> None:
+    doc_a = _cad_document(text_styles=(), dimension_styles=())
+    doc_b = _cad_document(text_styles=(), dimension_styles=())
+    assert engine.compare_styles(doc_a, doc_b) is None
+
+
+def test_compare_text_both_absent_is_not_applicable(engine: SimilarityEngine) -> None:
+    feature_a = _feature_vector(text_positions=())
+    feature_b = _feature_vector(text_positions=())
+    text_sequence_result = _text_sequence_result(1.0)
+    assert engine.compare_text(text_sequence_result, feature_a, feature_b) is None
+
+
+def test_compare_text_present_in_one_only_is_dissimilar(
+    engine: SimilarityEngine,
+) -> None:
+    feature_a = _feature_vector(text_positions=(("peca 01", 0.0, 0.0),))
+    feature_b = _feature_vector(text_positions=())
+    text_sequence_result = _text_sequence_result(0.0)
+    score = engine.compare_text(text_sequence_result, feature_a, feature_b)
+    assert score is not None
+    assert score < 0.5
+
+
+def test_compute_score_renormalizes_when_components_not_applicable(
+    engine: SimilarityEngine,
+) -> None:
+    feature = _feature_vector(
+        block_usage_counts=(),
+        text_positions=(),
+        dimension_distance_histogram=(0.0, 0.0),
+        decimal_precision_histogram=(0.0, 0.0),
+    )
+    metrics = _graph_metrics()
+    doc = _cad_document(text_styles=(), dimension_styles=())
+    result = engine.compute_score(
+        feature, feature, _sequence_result(1.0), metrics, metrics, _text_sequence_result(),
+        doc, doc,
+    )
+    inapplicable = {"blocks", "text", "dimensions", "decimal_precision", "styles", "pieces"}
+    for component in result.component_scores:
+        assert component.applicable == (component.name not in inapplicable)
+    assert result.total_score == pytest.approx(100.0)
+
+
+def _square_document(origin: Tuple[float, float] = (0.0, 0.0)) -> CadDocument:
+    corners = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]
+    points = [(x + origin[0], y + origin[1]) for x, y in corners]
+    entities = tuple(
+        LineEntity(
+            handle=str(index),
+            start=(start[0], start[1], 0.0),
+            end=(end[0], end[1], 0.0),
+            linewidth=0,
+        )
+        for index, (start, end) in enumerate(zip(points, points[1:] + points[:1]))
+    )
+    return _cad_document_with_entities(entities)
+
+
+def _cad_document_with_entities(entities) -> CadDocument:
+    return CadDocument(
+        source_path=None,
+        entities=entities,
+        blocks=(),
+        text_styles=("Standard",),
+        dimension_styles=("Standard",),
+        metadata=_metadata(),
+    )
+
+
+def test_compare_pieces_identical_document_yields_perfect_score(
+    engine: SimilarityEngine,
+) -> None:
+    doc = _square_document()
+    assert engine.compare_pieces(doc, doc) == pytest.approx(1.0, abs=1e-6)
+
+
+def test_compare_pieces_no_entities_in_either_is_not_applicable(
+    engine: SimilarityEngine,
+) -> None:
+    empty = _cad_document_with_entities(())
+    assert engine.compare_pieces(empty, empty) is None
+
+
+def test_compare_pieces_present_in_one_only_is_dissimilar(
+    engine: SimilarityEngine,
+) -> None:
+    doc = _square_document()
+    empty = _cad_document_with_entities(())
+    assert engine.compare_pieces(doc, empty) == pytest.approx(0.0)

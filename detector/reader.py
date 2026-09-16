@@ -18,77 +18,78 @@ Point2D = tuple[float, float]
 @dataclass(frozen=True)
 class LineEntity:
     handle: str
-    layer: str
     start: Point3D
     end: Point3D
+    linewidth: int
 
 
 @dataclass(frozen=True)
 class ArcEntity:
     handle: str
-    layer: str
     center: Point3D
     radius: float
     start_angle: float
     end_angle: float
+    linewidth: int
 
 
 @dataclass(frozen=True)
 class CircleEntity:
     handle: str
-    layer: str
     center: Point3D
     radius: float
+    linewidth: int
 
 
 @dataclass(frozen=True)
 class PolylineEntity:
     handle: str
-    layer: str
     points: tuple[Point2D, ...]
     closed: bool
+    linewidth: int
 
 
 @dataclass(frozen=True)
 class InsertEntity:
     handle: str
-    layer: str
     block_name: str
     insert_point: Point3D
     x_scale: float
     y_scale: float
     z_scale: float
     rotation: float
+    linewidth: int
 
 
 @dataclass(frozen=True)
 class TextEntity:
     handle: str
-    layer: str
     text: str
     insert_point: Point3D
     height: float
     style: str
+    linewidth: int
 
 
 @dataclass(frozen=True)
 class MTextEntity:
     handle: str
-    layer: str
     text: str
     insert_point: Point3D
     char_height: float
     style: str
+    linewidth: int
 
 
 @dataclass(frozen=True)
 class DimensionEntity:
     handle: str
-    layer: str
+    insert_point: Point3D
     dim_type: int
     style: str
     text_override: str
     measurement: Optional[float]
+    linewidth: int
 
 
 CadEntity = Union[
@@ -116,7 +117,6 @@ class DocumentMetadata:
 class CadDocument:
     source_path: Optional[Path]
     entities: tuple[CadEntity, ...]
-    layers: tuple[str, ...]
     blocks: tuple[str, ...]
     text_styles: tuple[str, ...]
     dimension_styles: tuple[str, ...]
@@ -157,6 +157,16 @@ def vec_to_point3d(vec: Vec3) -> Point3D:
     return (float(vec.x), float(vec.y), float(vec.z))
 
 
+def _extract_linewidth(entity: DXFEntity) -> int:
+    try:
+        return int(entity.dxf.linewidth)
+    except Exception:
+        try:
+            return int(entity.dxf.const_linewidth)
+        except Exception:
+            return -3
+
+
 class DxfReader:
     def __init__(self, loader: Optional[DxfLoader] = None) -> None:
         self._loader = loader if loader is not None else DxfLoader()
@@ -178,7 +188,6 @@ class DxfReader:
         return CadDocument(
             source_path=source_path,
             entities=entities,
-            layers=self._extract_layers(document),
             blocks=self._extract_blocks(document),
             text_styles=self._extract_text_styles(document),
             dimension_styles=self._extract_dimension_styles(document),
@@ -208,27 +217,27 @@ class DxfReader:
     def _parse_line(self, entity: DXFEntity) -> LineEntity:
         return LineEntity(
             handle=entity.dxf.handle,
-            layer=entity.dxf.layer,
             start=vec_to_point3d(Vec3(entity.dxf.start)),
             end=vec_to_point3d(Vec3(entity.dxf.end)),
+            linewidth=_extract_linewidth(entity),
         )
 
     def _parse_arc(self, entity: DXFEntity) -> ArcEntity:
         return ArcEntity(
             handle=entity.dxf.handle,
-            layer=entity.dxf.layer,
             center=vec_to_point3d(Vec3(entity.dxf.center)),
             radius=float(entity.dxf.radius),
             start_angle=float(entity.dxf.start_angle),
             end_angle=float(entity.dxf.end_angle),
+            linewidth=_extract_linewidth(entity),
         )
 
     def _parse_circle(self, entity: DXFEntity) -> CircleEntity:
         return CircleEntity(
             handle=entity.dxf.handle,
-            layer=entity.dxf.layer,
             center=vec_to_point3d(Vec3(entity.dxf.center)),
             radius=float(entity.dxf.radius),
+            linewidth=_extract_linewidth(entity),
         )
 
     def _parse_polyline(self, entity: DXFEntity) -> PolylineEntity:
@@ -237,41 +246,41 @@ class DxfReader:
         )
         return PolylineEntity(
             handle=entity.dxf.handle,
-            layer=entity.dxf.layer,
             points=points,
             closed=bool(entity.closed),
+            linewidth=_extract_linewidth(entity),
         )
 
     def _parse_insert(self, entity: DXFEntity) -> InsertEntity:
         return InsertEntity(
             handle=entity.dxf.handle,
-            layer=entity.dxf.layer,
             block_name=entity.dxf.name,
             insert_point=vec_to_point3d(Vec3(entity.dxf.insert)),
             x_scale=float(entity.dxf.xscale),
             y_scale=float(entity.dxf.yscale),
             z_scale=float(entity.dxf.zscale),
             rotation=float(entity.dxf.rotation),
+            linewidth=_extract_linewidth(entity),
         )
 
     def _parse_text(self, entity: DXFEntity) -> TextEntity:
         return TextEntity(
             handle=entity.dxf.handle,
-            layer=entity.dxf.layer,
             text=entity.dxf.text,
             insert_point=vec_to_point3d(Vec3(entity.dxf.insert)),
             height=float(entity.dxf.height),
             style=entity.dxf.style,
+            linewidth=_extract_linewidth(entity),
         )
 
     def _parse_mtext(self, entity: DXFEntity) -> MTextEntity:
         return MTextEntity(
             handle=entity.dxf.handle,
-            layer=entity.dxf.layer,
             text=entity.plain_text(),
             insert_point=vec_to_point3d(Vec3(entity.dxf.insert)),
             char_height=float(entity.dxf.char_height),
             style=entity.dxf.style,
+            linewidth=_extract_linewidth(entity),
         )
 
     def _parse_dimension(self, entity: DXFEntity) -> DimensionEntity:
@@ -279,17 +288,19 @@ class DxfReader:
             measurement: Optional[float] = float(entity.get_measurement())
         except Exception:
             measurement = None
+        try:
+            insert_point = vec_to_point3d(Vec3(entity.dxf.defpoint))
+        except Exception:
+            insert_point = (0.0, 0.0, 0.0)
         return DimensionEntity(
             handle=entity.dxf.handle,
-            layer=entity.dxf.layer,
+            insert_point=insert_point,
             dim_type=int(entity.dxf.dimtype),
             style=entity.dxf.dimstyle,
             text_override=entity.dxf.text,
             measurement=measurement,
+            linewidth=_extract_linewidth(entity),
         )
-
-    def _extract_layers(self, document: Drawing) -> tuple[str, ...]:
-        return tuple(layer.dxf.name for layer in document.layers)
 
     def _extract_blocks(self, document: Drawing) -> tuple[str, ...]:
         return tuple(

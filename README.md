@@ -17,7 +17,6 @@ Sistema em Python para analisar arquivos DWG/DXF e identificar pares suspeitos d
 | `detector/report.py` | ✅ |
 | `detector/classifier.py` | ⏳ (opcional) |
 | `ui/main_window.py` | ✅ |
-| `build_exe.py` | ✅ |
 | Testes | ✅ (161) |
 
 ## Instalação
@@ -59,57 +58,6 @@ python app.py --folder data/meus_desenhos
 ```bash
 pytest
 pytest --cov=detector --cov-report=term-missing
-```
-
-## Build de executável
-
-### Linux (nativo)
-
-```bash
-python build_exe.py
-```
-
-Gera `dist/DetectorPlagioCAD`.
-
-### Windows (cruzado do Linux)
-
-Requer Wine + Python for Windows + dependências instaladas.
-
-```bash
-# 1. Instalar Wine
-sudo apt install wine wine64
-
-# 2. Baixar e instalar Python for Windows
-#    Baixa de https://www.python.org/downloads/windows/
-wget https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe
-wine python-3.10.11-amd64.exe /quiet InstallAllUsers=1 PrependPath=1
-
-# 3. Instalar dependências no Python Windows
-wine "C:\\Program Files\\Python310\\python.exe" -m pip install pyinstaller ezdxf numpy pandas networkx rapidfuzz pyside6
-
-# 4. Build
-python build_exe.py --target windows
-```
-
-Gera `dist/DetectorPlagioCAD.exe`.
-
-> **Nota:** Wine 9.0 pode falhar com `ucrtbase.dll.crealf` ao processar numpy.
-> Instale a ucrtbase nativa da Microsoft com `winetricks ucrtbase` ou
-> atualize o Wine seguindo https://wiki.winehq.org/Ubuntu.
-
-### Windows (nativo)
-
-```bash
-python build_exe.py
-```
-
-### Opções do build
-
-```
-python build_exe.py --help
-
---target {linux,windows}   SO de destino (padrao: SO atual)
---python PYTHON            Caminho do interpretador Python (para compilação cruzada)
 ```
 
 ## Configuração

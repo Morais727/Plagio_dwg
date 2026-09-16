@@ -153,7 +153,6 @@ class GraphBuilder:
             graph.add_node(
                 index,
                 handle=entity.handle,
-                layer=entity.layer,
                 entity_type=type(entity).__name__,
             )
         linear_segments = self._linear_segments(entities)

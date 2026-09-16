@@ -39,7 +39,6 @@ def _document(entities: Tuple[CadEntity, ...]) -> CadDocument:
     return CadDocument(
         source_path=Path("sample.dxf"),
         entities=entities,
-        layers=("0",),
         blocks=(),
         text_styles=("Standard",),
         dimension_styles=("Standard",),
@@ -49,8 +48,8 @@ def _document(entities: Tuple[CadEntity, ...]) -> CadDocument:
 
 def test_build_creates_one_node_per_entity(builder: GraphBuilder) -> None:
     entities = (
-        LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(1.0, 0.0, 0.0)),
-        CircleEntity(handle="2", layer="0", center=(5.0, 5.0, 0.0), radius=1.0),
+        LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(1.0, 0.0, 0.0), linewidth=0),
+        CircleEntity(handle="2", center=(5.0, 5.0, 0.0), radius=1.0, linewidth=0),
     )
     graph = builder.build(_document(entities))
     assert graph.number_of_nodes() == 2
@@ -63,8 +62,8 @@ def test_perpendicular_lines_sharing_endpoint_intersect_and_are_perpendicular(
     builder: GraphBuilder,
 ) -> None:
     entities = (
-        LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0)),
-        LineEntity(handle="2", layer="0", start=(0.0, 0.0, 0.0), end=(0.0, 10.0, 0.0)),
+        LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0), linewidth=0),
+        LineEntity(handle="2", start=(0.0, 0.0, 0.0), end=(0.0, 10.0, 0.0), linewidth=0),
     )
     graph = builder.build(_document(entities))
     assert graph.has_edge(0, 1)
@@ -75,8 +74,8 @@ def test_perpendicular_lines_sharing_endpoint_intersect_and_are_perpendicular(
 
 def test_crossing_lines_intersect_and_are_perpendicular(builder: GraphBuilder) -> None:
     entities = (
-        LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(10.0, 10.0, 0.0)),
-        LineEntity(handle="2", layer="0", start=(0.0, 10.0, 0.0), end=(10.0, 0.0, 0.0)),
+        LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(10.0, 10.0, 0.0), linewidth=0),
+        LineEntity(handle="2", start=(0.0, 10.0, 0.0), end=(10.0, 0.0, 0.0), linewidth=0),
     )
     graph = builder.build(_document(entities))
     assert graph.has_edge(0, 1)
@@ -89,8 +88,8 @@ def test_parallel_non_intersecting_lines_are_flagged_parallel_only(
     builder: GraphBuilder,
 ) -> None:
     entities = (
-        LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0)),
-        LineEntity(handle="2", layer="0", start=(0.0, 5.0, 0.0), end=(10.0, 5.0, 0.0)),
+        LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0), linewidth=0),
+        LineEntity(handle="2", start=(0.0, 5.0, 0.0), end=(10.0, 5.0, 0.0), linewidth=0),
     )
     graph = builder.build(_document(entities))
     assert graph.has_edge(0, 1)
@@ -100,8 +99,8 @@ def test_parallel_non_intersecting_lines_are_flagged_parallel_only(
 
 def test_unrelated_lines_produce_no_edge(builder: GraphBuilder) -> None:
     entities = (
-        LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(1.0, 0.3, 0.0)),
-        LineEntity(handle="2", layer="0", start=(50.0, 50.0, 0.0), end=(60.0, 55.0, 0.0)),
+        LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(1.0, 0.3, 0.0), linewidth=0),
+        LineEntity(handle="2", start=(50.0, 50.0, 0.0), end=(60.0, 55.0, 0.0), linewidth=0),
     )
     graph = builder.build(_document(entities))
     assert not graph.has_edge(0, 1)
@@ -109,8 +108,8 @@ def test_unrelated_lines_produce_no_edge(builder: GraphBuilder) -> None:
 
 def test_line_tangent_to_circle_is_flagged_tangency(builder: GraphBuilder) -> None:
     entities = (
-        LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0)),
-        CircleEntity(handle="2", layer="0", center=(5.0, 1.0, 0.0), radius=1.0),
+        LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0), linewidth=0),
+        CircleEntity(handle="2", center=(5.0, 1.0, 0.0), radius=1.0, linewidth=0),
     )
     graph = builder.build(_document(entities))
     assert graph.has_edge(0, 1)
@@ -119,8 +118,8 @@ def test_line_tangent_to_circle_is_flagged_tangency(builder: GraphBuilder) -> No
 
 def test_line_crossing_circle_is_flagged_intersection(builder: GraphBuilder) -> None:
     entities = (
-        LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0)),
-        CircleEntity(handle="2", layer="0", center=(5.0, 0.5, 0.0), radius=1.0),
+        LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0), linewidth=0),
+        CircleEntity(handle="2", center=(5.0, 0.5, 0.0), radius=1.0, linewidth=0),
     )
     graph = builder.build(_document(entities))
     assert graph.has_edge(0, 1)
@@ -129,8 +128,8 @@ def test_line_crossing_circle_is_flagged_intersection(builder: GraphBuilder) -> 
 
 def test_externally_tangent_circles_are_flagged_tangency(builder: GraphBuilder) -> None:
     entities = (
-        CircleEntity(handle="1", layer="0", center=(0.0, 0.0, 0.0), radius=1.0),
-        CircleEntity(handle="2", layer="0", center=(3.0, 0.0, 0.0), radius=2.0),
+        CircleEntity(handle="1", center=(0.0, 0.0, 0.0), radius=1.0, linewidth=0),
+        CircleEntity(handle="2", center=(3.0, 0.0, 0.0), radius=2.0, linewidth=0),
     )
     graph = builder.build(_document(entities))
     assert graph.has_edge(0, 1)
@@ -139,8 +138,8 @@ def test_externally_tangent_circles_are_flagged_tangency(builder: GraphBuilder) 
 
 def test_overlapping_circles_are_flagged_intersection(builder: GraphBuilder) -> None:
     entities = (
-        CircleEntity(handle="1", layer="0", center=(0.0, 0.0, 0.0), radius=2.0),
-        CircleEntity(handle="2", layer="0", center=(3.0, 0.0, 0.0), radius=2.0),
+        CircleEntity(handle="1", center=(0.0, 0.0, 0.0), radius=2.0, linewidth=0),
+        CircleEntity(handle="2", center=(3.0, 0.0, 0.0), radius=2.0, linewidth=0),
     )
     graph = builder.build(_document(entities))
     assert graph.has_edge(0, 1)
@@ -149,8 +148,8 @@ def test_overlapping_circles_are_flagged_intersection(builder: GraphBuilder) -> 
 
 def test_disjoint_circles_produce_no_edge(builder: GraphBuilder) -> None:
     entities = (
-        CircleEntity(handle="1", layer="0", center=(0.0, 0.0, 0.0), radius=1.0),
-        CircleEntity(handle="2", layer="0", center=(10.0, 10.0, 0.0), radius=1.0),
+        CircleEntity(handle="1", center=(0.0, 0.0, 0.0), radius=1.0, linewidth=0),
+        CircleEntity(handle="2", center=(10.0, 10.0, 0.0), radius=1.0, linewidth=0),
     )
     graph = builder.build(_document(entities))
     assert not graph.has_edge(0, 1)
@@ -160,11 +159,11 @@ def test_polyline_segment_can_intersect_another_entity(builder: GraphBuilder) ->
     entities = (
         PolylineEntity(
             handle="1",
-            layer="0",
             points=((0.0, 0.0), (10.0, 0.0), (10.0, 10.0)),
             closed=False,
+            linewidth=0,
         ),
-        LineEntity(handle="2", layer="0", start=(5.0, -5.0, 0.0), end=(5.0, 5.0, 0.0)),
+        LineEntity(handle="2", start=(5.0, -5.0, 0.0), end=(5.0, 5.0, 0.0), linewidth=0),
     )
     graph = builder.build(_document(entities))
     assert graph.has_edge(0, 1)
@@ -174,26 +173,26 @@ def test_polyline_segment_can_intersect_another_entity(builder: GraphBuilder) ->
 def test_non_geometric_entities_stay_isolated(builder: GraphBuilder) -> None:
     entities = (
         TextEntity(
-            handle="1", layer="0", text="hi", insert_point=(0.0, 0.0, 0.0), height=0.5, style="Standard"
+            handle="1", text="hi", insert_point=(0.0, 0.0, 0.0), height=0.5, style="Standard", linewidth=0
         ),
         MTextEntity(
-            handle="2", layer="0", text="hi", insert_point=(1.0, 0.0, 0.0), char_height=0.5, style="Standard"
+            handle="2", text="hi", insert_point=(1.0, 0.0, 0.0), char_height=0.5, style="Standard", linewidth=0
         ),
         DimensionEntity(
-            handle="3", layer="0", dim_type=0, style="Standard", text_override="<>", measurement=1.0
+            handle="3", insert_point=(0.0, 2.0, 0.0), dim_type=0, style="Standard", text_override="<>", measurement=1.0, linewidth=0
         ),
         InsertEntity(
             handle="4",
-            layer="0",
             block_name="X",
             insert_point=(2.0, 0.0, 0.0),
             x_scale=1.0,
             y_scale=1.0,
             z_scale=1.0,
             rotation=0.0,
+            linewidth=0,
         ),
         ArcEntity(
-            handle="5", layer="0", center=(100.0, 100.0, 0.0), radius=1.0, start_angle=0.0, end_angle=90.0
+            handle="5", center=(100.0, 100.0, 0.0), radius=1.0, start_angle=0.0, end_angle=90.0, linewidth=0
         ),
     )
     graph = builder.build(_document(entities))
@@ -203,8 +202,8 @@ def test_non_geometric_entities_stay_isolated(builder: GraphBuilder) -> None:
 
 def test_builder_uses_injected_config_for_parallel_tolerance() -> None:
     entities = (
-        LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0)),
-        LineEntity(handle="2", layer="0", start=(0.0, 5.0, 0.0), end=(10.0, 5.52408, 0.0)),
+        LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0), linewidth=0),
+        LineEntity(handle="2", start=(0.0, 5.0, 0.0), end=(10.0, 5.52408, 0.0), linewidth=0),
     )
     document = _document(entities)
 
@@ -219,9 +218,9 @@ def test_builder_uses_injected_config_for_parallel_tolerance() -> None:
 
 def _triangle_document() -> CadDocument:
     entities = (
-        LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0)),
-        LineEntity(handle="2", layer="0", start=(10.0, 0.0, 0.0), end=(5.0, 8.0, 0.0)),
-        LineEntity(handle="3", layer="0", start=(5.0, 8.0, 0.0), end=(0.0, 0.0, 0.0)),
+        LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(10.0, 0.0, 0.0), linewidth=0),
+        LineEntity(handle="2", start=(10.0, 0.0, 0.0), end=(5.0, 8.0, 0.0), linewidth=0),
+        LineEntity(handle="3", start=(5.0, 8.0, 0.0), end=(0.0, 0.0, 0.0), linewidth=0),
     )
     return _document(entities)
 
@@ -266,8 +265,8 @@ def test_triangle_betweenness_centrality_is_zero(builder: GraphBuilder) -> None:
 
 def test_disconnected_entities_produce_multiple_components(builder: GraphBuilder) -> None:
     entities = (
-        LineEntity(handle="1", layer="0", start=(0.0, 0.0, 0.0), end=(1.0, 0.0, 0.0)),
-        LineEntity(handle="2", layer="0", start=(50.0, 50.0, 0.0), end=(51.0, 50.7, 0.0)),
+        LineEntity(handle="1", start=(0.0, 0.0, 0.0), end=(1.0, 0.0, 0.0), linewidth=0),
+        LineEntity(handle="2", start=(50.0, 50.0, 0.0), end=(51.0, 50.7, 0.0), linewidth=0),
     )
     graph = builder.build(_document(entities))
     metrics = builder.compute_metrics(graph)
